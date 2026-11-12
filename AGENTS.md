@@ -103,8 +103,10 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
   first time it shows; `props: { headless: true }` is the copy for layouts that hide the panel).
 - `preview.png` is the gallery thumbnail: the product's name and a line at the left, a real screenshot of
   the list at the right, generated from that screenshot. `docs/screens.png` is four real screenshots side
-  by side. Both show example schedules only, in English: move the real `jobs/` files away, copy examples
-  in, shoot within 30 seconds (before the first tick) and move them back. Retake both when a screen changes.
+  by side. Both show example schedules only, in English, with example runs put into `scheduler.history`
+  for the strips (rows with status `done`, `failed`, `missed` need no terminal): move the real `jobs/`
+  files away, copy examples in, shoot within 30 seconds (before the first tick) and move them back; the
+  next tick drops the example rows. Retake both when a screen changes.
 
 ## Known gaps
 

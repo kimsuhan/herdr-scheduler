@@ -61,10 +61,11 @@ Top to bottom:
      last run failed, that line is the reason in `ansi1`;
   2. right-aligned: the time left as a timer in the terminal font, 12px (`foreground` in its last hour,
      else `muted`), "20:37:40", "2:40", or the state's word in its color in place of the timer; under
-     it in 10.5px `dim` when the last run was, "1h ago", after a 5px dot (`ansi2` when it is done or
-     handled, `ansi1` when it failed, was missed or interrupted). A code schedule that has made a round
-     and is in no state leads instead with "checked 2m ago" (11px `muted`) over its timer (10.5px
-     `dim`);
+     it a strip of its last eight runs, oldest at the left: a 3px by 10px bar per run (`ansi2` when it
+     is done or handled, `ansi1` when it failed, was missed or interrupted, the state's color while it
+     is going, else `dim`) and a 3px `border` dot for each slot with no run yet. A code schedule that
+     has made a round and is in no state leads instead with "checked 2m ago" (11px `muted`) over its
+     timer (10.5px `dim`);
   3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover).
   A schedule in a state (running, blocked, paused, gone wrong) has a `raised` background and its left
   border in the state's color; the others are plain, with the border in `background`. A broken file
@@ -104,8 +105,7 @@ Top to bottom:
      label, value truncated). For a code schedule "Runs" instead: Runs, "code: poll, handle" (", ended"
      when it has one), and Checked, "2m ago: 3 items, 0 new" ("failed" when the round threw, "not
      since the last reload" before its first).
-  3. "History", and at its right the last sixteen runs as a strip of 7px squares, newest at the right,
-     each in its state's color (`dim` when it has none); then one row per run, newest first: a 6px dot
+  3. "History", and at its right the last sixteen runs as the same strip of bars as on the list; then one row per run, newest first: a 6px dot
      and the state's word in its color (64px), the item's key and the note or else the trigger, and
      when. "No runs yet." when there are none.
   A broken file's page is one card: "Needs attention" with the pencil and the bin at its right, over

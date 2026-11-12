@@ -66,6 +66,16 @@ export default class Scheduler extends View {
 
   history(name) { return (shared("scheduler.history") ?? []).filter((r) => r.bot === name); }
 
+  // The last `n` runs as a strip of bars, oldest at the left: green went well, red went wrong, the
+  // state's color while one is going. Slots with no run yet are small dots, so the strip keeps its width.
+  strip(rows, n, t) {
+    const tone = { running: t.working, starting: t.working, blocked: t.blocked, done: t.ansi2, handled: t.ansi2, failed: t.ansi1, missed: t.ansi1, interrupted: t.ansi1 };
+    const runs = rows.slice(0, n).reverse();
+    return h_flex().gap(2).items_end().flex_none()
+      .children(Array.from({ length: n - runs.length }, () => div().w(3).h(3).rounded_full().bg(t.border)))
+      .children(runs.map((r) => div().w(3).h(10).rounded(1.5).bg(tone[state(r)] ?? t.dim)));
+  }
+
   // A run's terminal if it is still there: a background one is peeked at, a pane is gone to.
   // An ended one's last screen is read back into the panel.
   show(row, cx) {
@@ -467,7 +477,6 @@ export default class Scheduler extends View {
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
     const meta = wrong ? L(wrong) : L(describe(b.schedule));
-    const went = s === "done" || s === "handled" ? t.ansi2 : s === "failed" || s === "missed" || s === "interrupted" ? t.ansi1 : null;
     return h_flex().id(`bot-${b.name}`).mx(8).pl(10).pr(8).py(7).gap(10).items_center().rounded(8).cursor_pointer()
       .border_l(2).border_color(word ? color : t.background).when(Boolean(word), (el) => el.bg(t.raised)).hover((st) => st.bg(t.hover))
       .on_click((_e, cx) => { this.open = b.name; this.output = null; cx.notify(); })
@@ -481,9 +490,8 @@ export default class Scheduler extends View {
             : round ? div().text_size(11).text_color(t.muted).child(L("checked {0}", round[0]))
             : div().font_family(mono).text_size(12).text_color(at - Date.now() < 3_600_000 ? t.foreground : t.muted).child(timer(at)))
           .when(Boolean(round) && !word, (e) => e.child(div().font_family(mono).text_size(10.5).text_color(t.dim).child(timer(at))))
-          .when(Boolean(last) && !(round && !word), (e) => e.child(h_flex().gap(4).items_center().text_size(10.5).text_color(t.dim)
-            .when(Boolean(went), (x) => x.child(div().size(5).rounded_full().bg(went)))
-            .child(ago(last.at)))))
+          // How its last eight runs went (all dots before its first run).
+          .when(!(round && !word), (e) => e.child(this.strip(this.history(b.name), 8, t))))
         .child(div().id(`run-${b.name}`).size(24).flex_none().flex().items_center().justify_center().rounded(6).text_size(10)
           .text_color(t.dim).hover((st) => st.bg(t.raised).text_color(t.foreground))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => this.go(b, "manual", cx)).child("▶")));
@@ -552,7 +560,7 @@ export default class Scheduler extends View {
       // How its runs went: the last ones as a strip (newest at the right), then each run.
       .child(box()
         .child(h_flex().gap(8).items_center().child(cap("History")).child(div().flex_1())
-          .child(h_flex().gap(3).children(rows.slice(0, 16).reverse().map((r) => div().size(7).rounded(2).bg(tone[state(r)] ?? t.dim)))))
+          .child(this.strip(rows, 16, t)))
         .children(rows.length ? rows.flatMap((r) => {
           const s = state(r);
           return [h_flex().id(`h-${r.id}`).gap(8).px(6).py(5).rounded(6).items_center().cursor_pointer().hover((st) => st.bg(t.hover))
