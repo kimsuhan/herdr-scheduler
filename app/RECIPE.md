@@ -63,9 +63,8 @@ Top to bottom:
      else `muted`), "20:37:40", "2:40", or the state's word in its color in place of the timer; under
      it a strip of its last eight runs, oldest at the left: a 3px by 10px bar per run (`ansi2` when it
      is done or handled, `ansi1` when it failed, was missed or interrupted, the state's color while it
-     is going, else `dim`) and a 3px `border` dot for each slot with no run yet. A code schedule that
-     has made a round and is in no state leads instead with "checked 2m ago" (11px `muted`) over its
-     timer (10.5px `dim`);
+     is going, else `dim`) and a 3px `border` dot for each slot with no run yet. A code
+     schedule's row reads the same; what its last round found is on its page;
   3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover).
   A schedule in a state (running, blocked, paused, gone wrong) has a `raised` background and its left
   border in the state's color; the others are plain, with the border in `background`. A broken file
@@ -132,7 +131,9 @@ Top to bottom:
      "~/.herdr/worktrees/<repo>/<name>".
   Under the cards a red line saying what is wrong, only once Save was pressed with something wrong; then
   Cancel and a `solid` Save at the right ("Reset to the file" at the left for a changed script). A
-  script's form has card 1 with About only and card 2 without the catch-up field.
+  script's form has card 1 with About only, card 2 without the catch-up field, and in place of card 3
+  the same agent card as the Add script page, titled "Change its code": the agent pills, "Start in a
+  new tab", "Copy prompt" and "Show prompt".
 
 ## How it behaves
 
@@ -203,6 +204,12 @@ Top to bottom:
   talk in the panel's language: it says where the examples and `jobs/` are, what a script is and may
   use, to run `herdr-app check` afterwards, and above all to ask what the script should do before
   writing anything, because the panel can't know that.
+- A script's form hands an agent a prompt of its own for changing the code. It names the script's file
+  and tells the agent to read it, say what it does now and ask what should change before editing
+  anything; to change only that and keep the file's name; to warn before a change to the keys `poll`
+  returns, since every item still there would be handled again; to send a change of times or
+  description back to the panel's Edit; and to run `herdr-app check` and say what the next round will do
+  differently. Its tab is named "Edit <name>".
 - Picking a language sets shared `scheduler.lang` (`en` or `ko`; unset is English) and every copy of the
   panel redraws in it at once: labels, buttons, states, "5m ago" times ("5분 전"), schedules ("평일
   09:00", "5분마다"), validation and start failures, and notifications. Names, prompts, `about` lines,
@@ -240,7 +247,8 @@ Top to bottom:
   last round found, kept in a module-level object); `setPaused(name, on)`; `check(bot)` (a code schedule
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.
-- `prompt.js`, pure: `scriptPrompt(dir, language)`, the text the Add script page shows, copies and sends.
+- `prompt.js`, pure: `scriptPrompt(dir, language)`, the text the Add script page shows, copies and sends,
+  and `editPrompt(dir, name, language)`, the one a script's form does.
 - `main.js`: the `View`, `cx.timer.every(30000)` for the engine and `cx.timer.every(1000)` to redraw the
   timers (not in the headless copy), the list, detail and form (`InputState`, `Input`,
   `TextareaState`, `Textarea` from `gpui-base`).

@@ -13,6 +13,8 @@ const KO = {
   "Have an agent write it": "에이전트에게 맡기기",
   "The prompt explains how scripts work and makes the agent ask you what to build.": "프롬프트가 스크립트의 동작 방식을 알려 주고, 무엇을 만들지는 에이전트가 되묻게 합니다.",
   "Start in a new tab": "새 탭에서 시작", "Copy prompt": "프롬프트 복사", "Copied": "복사됨", "Show prompt": "프롬프트 보기", "Hide prompt": "프롬프트 숨기기",
+  "Change its code": "코드 수정하기",
+  "The prompt points the agent at this script's file and makes it ask you what to change.": "프롬프트가 이 스크립트의 파일을 알려 주고, 무엇을 바꿀지는 에이전트가 되묻게 합니다.",
   "Write it by hand": "직접 만들기",
   "Copy the example into the jobs folder and edit it. Its comments explain the format, and saving the file adds it here.":
     "예제를 jobs 폴더로 복사해서 고치세요. 형식은 파일의 주석에 설명돼 있고, 저장하면 여기에 나타납니다.",
@@ -20,7 +22,7 @@ const KO = {
   "{0} schedule": "스케줄 {0}개", "{0} schedules": "스케줄 {0}개", "Loading…": "불러오는 중…", "No schedules yet.": "아직 스케줄이 없습니다.",
   "A schedule is one JS file. Press Add schedule to make one, or copy one from mods/herdr-scheduler/examples/ to mods/herdr-scheduler/jobs/ and edit it; it shows up here when saved.":
     "스케줄 하나는 JS 파일 하나입니다. 스케줄 추가를 눌러 만들거나, mods/herdr-scheduler/examples/의 파일을 mods/herdr-scheduler/jobs/로 복사해서 고치세요. 저장하면 여기에 나타납니다.",
-  "checked {0}": "{0} 확인", "Timeline": "타임라인", "now": "지금",
+  "Timeline": "타임라인", "now": "지금",
   "Running": "실행 중", "Needs attention": "확인 필요", "Schedules": "스케줄", "Scripts": "스크립트", "Paused": "일시 정지", "{0} item, {1} new": "항목 {0}개, 새 항목 {1}개",
   "{0} items, {1} new": "항목 {0}개, 새 항목 {1}개",
   // When

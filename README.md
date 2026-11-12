@@ -126,8 +126,9 @@ shared state under `scheduler.state`, where other mods can read it), `spaces`, `
 `examples/worktree-cleanup.js` is a commented script that marks worktree spaces whose pull request is
 merged or closed.
 
-In the panel a script can be run, paused and deleted, and its times and description can be changed. Its
-code is changed in the file.
+In the panel a script can be run, paused and deleted, and its times and description can be changed. To
+change its code, its Edit page has a prompt as well: the agent reads the script, tells you what it does
+and asks what you want changed.
 
 ## Read before you run
 

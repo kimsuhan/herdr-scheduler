@@ -19,8 +19,8 @@ Built: prompt schedules, code schedules, the panel with its form, and the headle
   - `schedule.test.js`: `node --test` cases for `schedule.js`.
   - `i18n.js` and `i18n.test.js`: the panel's languages (English and Korean), and the test that every
     string the code shows has a text in each.
-  - `prompt.js`: the prompt the Add script page gives an agent. It describes the script format, so it
-    changes whenever the format or `ctx` does.
+  - `prompt.js`: the prompts the Add script page and a script's form give an agent. They describe the
+    script format, so they change whenever the format or `ctx` does.
   - `settings.svg`, `plus.svg`, `script.svg`, `pencil.svg`, `trash.svg`: the icons.
   - `examples/`: example schedules. They ship inside the mod because whoever adds a mod copies only
     `mods/<name>/`.

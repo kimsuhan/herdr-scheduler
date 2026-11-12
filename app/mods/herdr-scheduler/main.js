@@ -8,7 +8,7 @@ import { hc, run, theme, settings, shared, setShared, spaces, pickFolder, props,
 import { load, tick, start, state, busy, setPaused, check, save, remove, lastRound, current, setOverride } from "./engine.js";
 import { describe, next, parse } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
-import { scriptPrompt } from "./prompt.js";
+import { scriptPrompt, editPrompt } from "./prompt.js";
 
 const TICK = 30_000;
 const REPEATS = [["daily", "Daily"], ["weekdays", "Weekdays"], ["days", "Days"], ["every", "Every"]];
@@ -106,6 +106,7 @@ export default class Scheduler extends View {
     };
     this.form = {
       original: bot?.name ?? null, problem: null, code: Boolean(bot?.code), over: Boolean(over),
+      ask: bot?.code ? this.asking(cx) : null, // its code is changed by an agent, not in the form
       repeat: s.every != null ? "every" : s.daily != null ? "daily" : s.days ? "days" : "weekdays", days: s.days ?? [1],
       place: w.space != null ? "space" : w.worktree ? "worktree" : "background", space: w.space ?? "",
       rev: w.worktree?.branch != null ? "branch" : "commit", folder: w.worktree?.name,
@@ -188,24 +189,59 @@ export default class Scheduler extends View {
   // The Add script page. A script is code, so there is no form for it: the page says how one is made
   // and hands an agent a prompt that makes it ask what to build.
   addScript(cx) {
-    this.guide = { agents: null, agent: null, copied: false, shown: false };
+    this.guide = this.asking(cx);
     cx.notify();
+  }
+
+  // The state of an "ask an agent" card: the installed agents (null while asked), the picked one,
+  // whether the prompt was copied and whether it is unfolded.
+  asking(cx) {
+    const g = { agents: null, agent: null, copied: false, shown: false };
     cx.spawn(async (cx) => {
-      const g = this.guide;
       try { g.agents = (await knownAgents()).filter((a) => a.installed); } catch { g.agents = []; }
       g.agent = g.agents[0]?.key ?? null;
       cx.notify();
     });
+    return g;
+  }
+
+  // A card that hands an agent a prompt: pick an installed agent and start it in a new tab (in Herdr's
+  // folder, where it finds the mod and Herdr's own guide for writing one), copy the prompt, or read it.
+  askCard(t, g, id, text, { title, note, tab, done }) {
+    const mono = settings().font_family ?? "JetBrains Mono", agent = g.agents?.find((a) => a.key === g.agent);
+    const quiet = (key, label, onClick) => div().id(`${id}-${key}`).px(8).py(4).rounded(6).text_size(11.5).text_color(t.muted).cursor_pointer()
+      .hover((st) => st.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { onClick(cx); cx.notify(); }).child(L(label));
+    return v_flex().p(12).gap(10).rounded(10).bg(t.raised)
+      .child(v_flex().gap(3)
+        .child(div().text_size(13).font_medium().child(L(title)))
+        .child(div().text_size(11.5).text_color(t.muted).child(L(note))))
+      .when(Boolean(g.agents?.length), (el) => el
+        .child(h_flex().flex_wrap().gap(6).children(g.agents.map((a) => {
+          const on = a.key === g.agent;
+          return h_flex().id(`${id}-agent-${a.key}`).h(28).px(9).gap(6).items_center().rounded(7).text_size(12).cursor_pointer()
+            .bg(on ? t.selected : t.background).text_color(on ? t.foreground : t.muted)
+            .border_1().border_color(on ? t.accent : t.border).hover((st) => st.bg(t.hover))
+            .on_click((_e, cx) => { g.agent = a.key; cx.notify(); })
+            .when(Boolean(a.icon), (e) => e.child(a.tint ? svg(a.icon).size(14) : image(a.icon).w(14).h(14)))
+            .child(a.name);
+        })))
+        .child(h_flex().id(`${id}-send`).h(32).items_center().justify_center().rounded(8).text_size(12.5).font_medium().cursor_pointer()
+          .bg(t.solid).text_color(t.solid_foreground).hover((st) => st.opacity(0.88))
+          .on_click((_e, cx) => { run("tab.new", { name: tab, folder: appHome(), argv: agent.run, task: text }); done(); cx.notify(); })
+          .child(L("Start in a new tab"))))
+      .child(h_flex().gap(2)
+        .child(quiet("copy", g.copied ? "Copied" : "Copy prompt", (cx) => { cx.write_to_clipboard(text); g.copied = true; }))
+        .child(quiet("show", g.shown ? "Hide prompt" : "Show prompt", () => { g.shown = !g.shown; })))
+      .when(Boolean(g.shown), (el) => el.child(div().id(`${id}-prompt`).h(220).p(8).rounded(7).bg(t.background).overflow_y_scrollbar()
+        .font_family(mono).text_size(11).text_color(t.muted).child(text)));
   }
 
   renderGuide(t) {
     const g = this.guide, dir = `${appHome()}/mods/herdr-scheduler`.replace(home(), "~");
     const text = scriptPrompt(dir, shared("scheduler.lang") === "ko" ? "Korean" : "English");
-    const mono = settings().font_family ?? "JetBrains Mono", agent = g.agents?.find((a) => a.key === g.agent);
+    const mono = settings().font_family ?? "JetBrains Mono";
     const title = (s) => div().text_size(13).font_medium().child(L(s));
     const note = (s) => div().text_size(11.5).text_color(t.muted).child(L(s));
-    const quiet = (id, label, onClick) => div().id(id).px(8).py(4).rounded(6).text_size(11.5).text_color(t.muted).cursor_pointer()
-      .hover((st) => st.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { onClick(cx); cx.notify(); }).child(L(label));
     // What a script does, as three steps in a row.
     const step = (n, head, sub) => v_flex().flex_1().min_w(0).p(8).gap(3).rounded(8).border_1().border_color(t.border)
       .child(h_flex().gap(6).items_center()
@@ -219,30 +255,8 @@ export default class Scheduler extends View {
         .child(step(2, "New only", "each item once"))
         .child(step(3, "React", "an agent, or a note")))
       // The main way: an agent writes it, after asking what to build.
-      .child(v_flex().p(12).gap(10).rounded(10).bg(t.raised)
-        .child(v_flex().gap(3)
-          .child(title("Have an agent write it"))
-          .child(note("The prompt explains how scripts work and makes the agent ask you what to build.")))
-        .when(Boolean(g.agents?.length), (el) => el
-          .child(h_flex().flex_wrap().gap(6).children(g.agents.map((a) => {
-            const on = a.key === g.agent;
-            return h_flex().id(`guide-agent-${a.key}`).h(28).px(9).gap(6).items_center().rounded(7).text_size(12).cursor_pointer()
-              .bg(on ? t.selected : t.background).text_color(on ? t.foreground : t.muted)
-              .border_1().border_color(on ? t.accent : t.border).hover((st) => st.bg(t.hover))
-              .on_click((_e, cx) => { g.agent = a.key; cx.notify(); })
-              .when(Boolean(a.icon), (e) => e.child(a.tint ? svg(a.icon).size(14) : image(a.icon).w(14).h(14)))
-              .child(a.name);
-          })))
-          // In Herdr's folder, where the agent finds the mod and Herdr's own guide for writing one.
-          .child(h_flex().id("guide-send").h(32).items_center().justify_center().rounded(8).text_size(12.5).font_medium().cursor_pointer()
-            .bg(t.solid).text_color(t.solid_foreground).hover((st) => st.opacity(0.88))
-            .on_click(() => { run("tab.new", { name: L("New script"), folder: appHome(), argv: agent.run, task: text }); this.guide = null; })
-            .child(L("Start in a new tab"))))
-        .child(h_flex().gap(2)
-          .child(quiet("guide-copy", g.copied ? "Copied" : "Copy prompt", (cx) => { cx.write_to_clipboard(text); g.copied = true; }))
-          .child(quiet("guide-show", g.shown ? "Hide prompt" : "Show prompt", () => { g.shown = !g.shown; })))
-        .when(Boolean(g.shown), (el) => el.child(div().id("guide-prompt").h(220).p(8).rounded(7).bg(t.background).overflow_y_scrollbar()
-          .font_family(mono).text_size(11).text_color(t.muted).child(text))))
+      .child(this.askCard(t, g, "guide", text, { title: "Have an agent write it", tab: L("New script"), done: () => { this.guide = null; },
+        note: "The prompt explains how scripts work and makes the agent ask you what to build." }))
       // The other way: the example file, by hand.
       .child(v_flex().p(12).gap(8).rounded(10).border_1().border_color(t.border)
         .child(v_flex().gap(3)
@@ -367,6 +381,11 @@ export default class Scheduler extends View {
             .child(field(f.rev === "commit" ? "Branch or commit to check out" : "Branch name", input("f-ref", f.ref)))
             .when(Boolean(f.repo.value().trim()), (x) => x.child(div().truncate().font_family(settings().font_family ?? "JetBrains Mono").text_size(10.5).text_color(t.dim)
               .child(`~/.herdr/worktrees/${f.repo.value().trim().split("/").filter(Boolean).pop()}/${f.folder ?? f.original ?? f.name.value().trim()}`)))))))
+      // A script's code isn't the form's to change: an agent does it, after asking what to change.
+      .when(f.code, (el) => el.child(this.askCard(t, f.ask, "f-ask",
+        editPrompt(`${appHome()}/mods/herdr-scheduler`.replace(home(), "~"), f.original, shared("scheduler.lang") === "ko" ? "Korean" : "English"),
+        { title: "Change its code", tab: L("Edit {0}", f.original), done: () => { this.form = null; },
+          note: "The prompt points the agent at this script's file and makes it ask you what to change." })))
       // What is wrong shows once Save was pressed: an empty form isn't an error yet.
       .when(Boolean(f.tried && problem), (el) => el.child(div().text_size(12).text_color(t.ansi1).child(problem)))
       .child(h_flex().gap(8).items_center()
@@ -469,11 +488,10 @@ export default class Scheduler extends View {
   }
 
   // One schedule: its name over when it runs, and on the right the timer to its next run (or its
-  // state's word) over how the last run went. A code schedule that has made a round leads with when it
-  // last checked, over the timer: for a watcher the question is whether it is watching, not when. Only a schedule in a state stands out, with a raised
+  // state's word) over how its last runs went. Schedules and scripts read the same. Only a schedule in a state stands out, with a raised
   // background and a bar in the state's color: the idle ones stay plain.
   row(b, t) {
-    const [word, color] = this.status(b, t), last = this.history(b.name)[0], s = last && state(last), round = b.code && this.checked(b);
+    const [word, color] = this.status(b, t), last = this.history(b.name)[0], s = last && state(last);
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
     const meta = wrong ? L(wrong) : L(describe(b.schedule));
@@ -487,11 +505,9 @@ export default class Scheduler extends View {
         .child(v_flex().flex_none().gap(2).items_end()
           // Mono digits: the timer doesn't jiggle as it counts. Bright in its last hour.
           .child(word ? div().text_size(11).text_color(color).child(L(word))
-            : round ? div().text_size(11).text_color(t.muted).child(L("checked {0}", round[0]))
             : div().font_family(mono).text_size(12).text_color(at - Date.now() < 3_600_000 ? t.foreground : t.muted).child(timer(at)))
-          .when(Boolean(round) && !word, (e) => e.child(div().font_family(mono).text_size(10.5).text_color(t.dim).child(timer(at))))
           // How its last eight runs went (all dots before its first run).
-          .when(!(round && !word), (e) => e.child(this.strip(this.history(b.name), 8, t))))
+          .child(this.strip(this.history(b.name), 8, t)))
         .child(div().id(`run-${b.name}`).size(24).flex_none().flex().items_center().justify_center().rounded(6).text_size(10)
           .text_color(t.dim).hover((st) => st.bg(t.raised).text_color(t.foreground))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => this.go(b, "manual", cx)).child("▶")));
