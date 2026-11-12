@@ -1,8 +1,8 @@
-// A bot: copy this file to ../jobs/<name>.js and edit it. The file name is the bot's name.
+// A schedule: copy this file to ../jobs/<name>.js and edit it. The file name is the schedule's name.
 // Saving it reloads the scheduler; a mistake shows in the panel instead of running.
 
 export default {
-  // Optional: a line the panel shows on the bot's page.
+  // Optional: a line the panel shows on the schedule's page.
   about: "Checks dependencies for known vulnerabilities every weekday morning.",
 
   // When. One of:
@@ -20,7 +20,7 @@ export default {
   //   { background: true, cwd: "~/code/my-repo" }      no tab: read it from the panel's history
   //   { space: "my-repo" }                             a new tab in that space (its name or id)
   //   { worktree: { repo: "~/code/my-repo", commit: "origin/main" } }
-  //       a space on ~/.herdr/worktrees/my-repo/<bot name>, fetched and checked out on every run.
+  //       a space on ~/.herdr/worktrees/my-repo/<schedule name>, fetched and checked out on every run.
   //       `branch: "nightly"` instead of commit keeps a branch; `name` picks another folder name.
   where: { background: true, cwd: "~/code/my-repo" },
 

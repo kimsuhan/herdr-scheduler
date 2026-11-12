@@ -5,6 +5,10 @@
 import * as fs from "fs/promises";
 import { hc, exec, appHome, home, shared, setShared, terminals, spaces, panes, notify } from "herdr";
 import { parse, due, next, duration, items, remember } from "./schedule.js";
+import { say } from "./i18n.js";
+
+// Notifications in the panel's language. History notes stay English and are translated when shown.
+const L = (key, ...args) => say(shared("scheduler.lang"), key, ...args);
 
 // A slot this late still runs without catchUp: a tick is 30s, and a reload delays one.
 const GRACE = 90_000;
@@ -35,7 +39,7 @@ export function check(bot) {
   if (bot.about != null && typeof bot.about !== "string") throw new Error("about is a line of text");
   const about = bot.about?.trim() || null;
   if (bot.poll != null || bot.handle != null) {
-    if (typeof bot.poll !== "function" || typeof bot.handle !== "function") throw new Error("a code bot needs poll and handle functions");
+    if (typeof bot.poll !== "function" || typeof bot.handle !== "function") throw new Error("a code schedule needs poll and handle functions");
     if (bot.ended != null && typeof bot.ended !== "function") throw new Error("ended must be a function");
     return { schedule: parse(bot.schedule), code: true, about };
   }
@@ -67,7 +71,7 @@ export async function load() {
 export async function save(name, bot, fresh) {
   check(bot);
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new Error("name: letters, digits, - and _ only");
-  if (fresh && await fs.exists(`${JOBS()}/${name}.js`)) throw new Error(`a bot named ${name} is already there`);
+  if (fresh && await fs.exists(`${JOBS()}/${name}.js`)) throw new Error(`a schedule named ${name} is already there`);
   await fs.mkdir(JOBS(), { recursive: true }).catch(() => {}); // already there
   await fs.writeFile(`${JOBS()}/${name}.js`, `export default ${JSON.stringify(bot, null, 2)};\n`);
 }
@@ -226,7 +230,7 @@ export async function start(bot, trigger) {
   } catch (e) {
     const note = String(e.message ?? e);
     patch(id, { status: "failed", note });
-    notify({ title: `${bot.name} didn't start`, body: note, level: "error" });
+    notify({ title: L("{0} didn't start", bot.name), body: L(note), level: "error" });
   }
 }
 
@@ -265,7 +269,7 @@ async function round(bot) {
     checked[bot.name] = { at: Date.now(), error: note };
     if (last?.status !== "failed" || last.note !== note) {
       record({ id: hex(8), bot: bot.name, at: Date.now(), trigger: "poll", status: "failed", note });
-      notify({ title: `${bot.name} failed`, body: note, level: "error" });
+      notify({ title: L("{0} failed", bot.name), body: L(note), level: "error" });
     }
   } finally { rounds.delete(bot.name); }
 }
@@ -283,7 +287,7 @@ async function handle(bot, item) {
   } catch (e) {
     const note = String(e.message ?? e);
     patch(id, { status: "failed", note });
-    notify({ title: `${bot.name} failed on ${item.key}`, body: note, level: "error" });
+    notify({ title: L("{0} failed on {1}", bot.name, item.key), body: L(note), level: "error" });
   }
 }
 

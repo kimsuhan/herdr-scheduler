@@ -1,11 +1,11 @@
 # herdr-scheduler
 
-A bot engine that lives inside the Herdr app as one mod: no daemon, no launchd, no CLI to install.
-A bot is one JS file. It runs on a schedule and gives an agent a prompt in an existing space, a new
-worktree, or a background `hc` terminal, or (a code bot) polls for items and handles each new one with
+A schedule engine that lives inside the Herdr app as one mod: no daemon, no launchd, no CLI to install.
+A schedule is one JS file. It fires at set times and gives an agent a prompt in an existing space, a new
+worktree, or a background `hc` terminal, or (a code schedule) polls for items and handles each new one with
 its own code. Public repo, MIT.
 
-Built: scheduled prompt bots, code bots, the panel with its form, and the headless copy.
+Built: prompt schedules, code schedules, the panel with its form, and the headless copy.
 `app/RECIPE.md` describes all of it; when behavior changes, change the recipe in the same commit.
 
 ## Layout
@@ -13,13 +13,16 @@ Built: scheduled prompt bots, code bots, the panel with its form, and the headle
 - `app/`: exactly what herdr.dev/mods shares: `mods/herdr-scheduler/`, `RECIPE.md`, `preview.png`.
 - `app/mods/herdr-scheduler/`: the mod.
   - `main.js`: the panel `View`, the tick timer, engine start.
-  - `engine.js`: loading bots, running them (the three places, `hc`), code bot rounds and `ctx`, history.
+  - `engine.js`: loading schedules, running them (the three places, `hc`), code schedule rounds and `ctx`, history.
   - `schedule.js`: schedule parsing and next-run time, a poll's items and the seen keys. Pure: no
     `herdr` or `gpui-kit` import.
   - `schedule.test.js`: `node --test` cases for `schedule.js`.
-  - `examples/`: example bots. They ship inside the mod because whoever adds a mod copies only
+  - `i18n.js` and `i18n.test.js`: the panel's languages (English and Korean), and the test that every
+    string the code shows has a text in each.
+  - `settings.svg`, `plus.svg`: the footer's icons.
+  - `examples/`: example schedules. They ship inside the mod because whoever adds a mod copies only
     `mods/<name>/`.
-  - `jobs/`: the user's bots. Gitignored, never in this repo.
+  - `jobs/`: the user's schedules. Gitignored, never in this repo.
 - `README.md` and `README.ko.md` (same content in English and Korean).
 
 Split a file only when it earns it (`run.js` out of `engine.js` once the three places get long).
@@ -28,10 +31,10 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 
 - The mod is the whole product. Don't add a CLI, a daemon, an install script or a config file outside
   the mod folder. If something seems to need one, stop and raise it.
-- Bots load only from `jobs/` inside the mod folder: Herdr blocks imports from outside it, and
-  `new Function` is disabled. A broken bot file stops that bot only and shows in the panel.
-- The bot file format and `ctx` are the public API: adding a field is cheap, changing or removing one
-  breaks people's bots. Code bots get only `ctx` (built in `api()` in `engine.js`) and never import
+- Schedules load only from `jobs/` inside the mod folder: Herdr blocks imports from outside it, and
+  `new Function` is disabled. A broken schedule file stops that schedule only and shows in the panel.
+- The schedule file format and `ctx` are the public API: adding a field is cheap, changing or removing one
+  breaks people's schedules. Code schedules get only `ctx` (built in `api()` in `engine.js`) and never import
   `herdr`, for the same reason. Keep `ctx` small.
 - Run once: several copies of the mod share one JS thread, so the engine reads `shared(key)` and calls
   `setShared` with no `await` in between before every run and every handled item (`scheduler.slots`,
@@ -39,7 +42,7 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - Start the engine in `init`, not at module top level: module code runs once per source version and is
   shared by copies, and a broken save has already run it.
 - Saving any file in the mod folder reloads the mod and restarts its timers. So the mod writes into its
-  own folder only when the person saves or deletes a bot in the form (`jobs/<name>.js`, and the reload is
+  own folder only when the person saves or deletes a schedule in the form (`jobs/<name>.js`, and the reload is
   how the list updates), and the first tick is a full 30 seconds after a load.
 - State goes in `shared` under `scheduler.*` (`slots`, `paused`, `next`, `history`, `seen`, `state`). Every
   `setShared` redraws every mod: write only when something changed, never on each tick.
@@ -55,18 +58,21 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 
 ## After a change
 
-- `node --test app/mods/herdr-scheduler/schedule.test.js` when `schedule.js` changes. Add a case for new behavior.
+- `node --test app/mods/herdr-scheduler/schedule.test.js app/mods/herdr-scheduler/i18n.test.js` after any
+  change to the mod's code. Add a case for new behavior.
+- Text the person sees goes through `L("English text", ...args)` and gets its Korean in `i18n.js` in the
+  same change. English is the key, so never build a shown sentence by concatenation: use `{0}`.
 - The installed copy isn't linked (Herdr doesn't reload through symlinks). Copy and check it:
   `cp -R app/mods/herdr-scheduler ~/.config/herdr-app/mods/ && herdr-app check ~/.config/herdr-app/mods/herdr-scheduler`,
   then `herdr-app status` for errors. The copy leaves the installed `jobs/` alone.
 - `herdr-app check` renders once and runs no timer. Engine behavior (a run, catch-up, pause, reload on
-  save, a code bot's round) is checked in the app with a throwaway `zz-*` bot on `{ every: "1m" }`; a
-  code bot's `poll` can read its items from a scratch JSON file through `ctx.exec("cat", …)`, so they
+  save, a code schedule's round) is checked in the app with a throwaway `zz-*` schedule on `{ every: "1m" }`; a
+  code schedule's `poll` can read its items from a scratch JSON file through `ctx.exec("cat", …)`, so they
   change without a reload. `herdr-app shot` shows the window.
 - Clean up test terminals with `hc kill` and `hc rm`, by address, after checking their
-  `scheduler.bot` label with `hc get`. Remove test bots from the installed `jobs/` first, or they keep starting.
+  `scheduler.bot` label with `hc get`. Remove test schedules from the installed `jobs/` first, or they keep starting.
 - Docs: change both READMEs; change `app/RECIPE.md` when the panel's look or behavior, `ctx`, or what
-  the mod reaches changes. `examples/worktree-cleanup.js` documents the code bot format and `ctx` in its
+  the mod reaches changes. `examples/worktree-cleanup.js` documents the code schedule format and `ctx` in its
   comments: keep it in step.
 
 ## Commits
@@ -87,23 +93,23 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - `RECIPE.md` is the brief another agent builds the mod from with an empty folder. Keep the order
   `~/.config/herdr-app/AGENTS.md` gives ("Layouts and mods other people made"): name, paragraph and
   preview, What you see, How it behaves, Built from, Watch out, Done when. Exact values, nothing the
-  build doesn't do. It must cover the bot file format and `ctx`, or a rebuild can't run existing bots.
+  build doesn't do. It must cover the schedule file format and `ctx`, or a rebuild can't run existing schedules.
 - Whoever adds the mod is told what it reaches. Keep a "Before you add it" section true: it runs
-  programs (`hc`, `git`, and whatever a bot runs), bots are arbitrary code the person puts in `jobs/`,
+  programs (`hc`, `git`, and whatever a schedule runs), schedules are arbitrary code the person puts in `jobs/`,
   it runs only while Herdr is open and a copy has been shown in the shown layout (a mod starts the
   first time it shows; `props: { headless: true }` is the copy for layouts that hide the panel).
-- `preview.png` is taken with example bots only, on public repos.
+- `preview.png` is taken with example schedules only, on public repos.
 
 ## Known gaps
 
-- Bots run per machine; spaces on other machines and runs while Herdr is closed are out of scope.
+- Schedules run per machine; spaces on other machines and runs while Herdr is closed are out of scope.
 - A background agent blocked on a permission question has no pane: it only shows in the panel.
 - An `agent` that reports no status (a plain shell) never gets its prompt: the run fails after 2 minutes.
-- The form writes a bot as plain data: editing a hand-written file through it drops the file's comments.
-  It can't rename a bot, and agent arguments with spaces need the file. There is no pause-all.
-- History in `shared` is capped at 50 per bot. If redraw cost shows, move it to a file outside the mod folder.
-- A code bot remembers 500 keys; a poll that keeps returning more than 500 distinct live keys hands the
-  oldest out again. Nothing forgets a key on purpose, and removing a bot leaves its `seen` and `state`.
+- The form writes a schedule as plain data: editing a hand-written file through it drops the file's comments.
+  It can't rename a schedule, and agent arguments with spaces need the file. There is no pause-all.
+- History in `shared` is capped at 50 per schedule. If redraw cost shows, move it to a file outside the mod folder.
+- A code schedule remembers 500 keys; a poll that keeps returning more than 500 distinct live keys hands the
+  oldest out again. Nothing forgets a key on purpose, and removing a schedule leaves its `seen` and `state`.
 - `ctx.start` and `ctx.send` work in `handle` only. "Run now" runs a whole round, not one item.
 - A `handle` running over 5 minutes reads "interrupted" until it returns.
-- The form can't edit a code bot (Edit is hidden for any file with functions).
+- The form can't edit a code schedule (Edit is hidden for any file with functions).
