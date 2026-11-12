@@ -66,14 +66,42 @@ export async function load() {
   return bots;
 }
 
+// A code bot's file has functions, so the panel can't write it back: what the panel changes of it (its
+// schedule and about line) is kept in shared "scheduler.overrides" and laid over the file's values
+// here. Every copy of the mod reads through this, so a change reaches them all without a reload.
+export function current(bots) {
+  const over = shared("scheduler.overrides") ?? {};
+  return bots.map((b) => {
+    const o = b.code && over[b.name];
+    if (!o) return b;
+    try { return { ...b, schedule: parse(o.schedule), about: o.about?.trim() || null, changed: true }; } catch { return b; } // a bad override: the file's
+  });
+}
+
+// Sets what the panel changed of a code bot, or with null goes back to the file's values.
+export function setOverride(name, values) {
+  const { [name]: _, ...rest } = shared("scheduler.overrides") ?? {};
+  setShared("scheduler.overrides", values ? { ...rest, [name]: values } : rest);
+}
+
 // Writes a bot the panel's form made, as jobs/<name>.js. The write reloads the mod, which is how
-// the list picks it up. `fresh`: refuse to replace a file that is already there.
-export async function save(name, bot, fresh) {
+// the list picks it up. `was`: the name it had, when it is an existing one. A new name must be free;
+// a changed one moves the file and what shared state keeps under the old name, so its history stays.
+export async function save(name, bot, was) {
   check(bot);
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(name)) throw new Error("name: letters, digits, - and _ only");
-  if (fresh && await fs.exists(`${JOBS()}/${name}.js`)) throw new Error(`a schedule named ${name} is already there`);
+  // The name is a file name and goes into terminal labels (scheduler.bot=<name>, scheduler.thread=<name>:<thread>).
+  if (!/^[^./\\:=][^/\\:=]*$/.test(name)) throw new Error("a name can't have / \\ : = in it or start with a dot");
+  if (name !== was && await fs.exists(`${JOBS()}/${name}.js`)) throw new Error(`a schedule named ${name} is already there`);
   await fs.mkdir(JOBS(), { recursive: true }).catch(() => {}); // already there
+  if (was && name !== was) {
+    for (const key of ["scheduler.slots", "scheduler.paused", "scheduler.seen", "scheduler.state"]) {
+      const { [was]: kept, ...rest } = shared(key) ?? {};
+      if (kept !== undefined) setShared(key, { ...rest, [name]: kept });
+    }
+    setShared("scheduler.history", (shared("scheduler.history") ?? []).map((r) => (r.bot === was ? { ...r, bot: name } : r)));
+  }
   await fs.writeFile(`${JOBS()}/${name}.js`, `export default ${JSON.stringify(bot, null, 2)};\n`);
+  if (was && name !== was) await fs.unlink(`${JOBS()}/${was}.js`);
 }
 
 export const remove = (name) => fs.unlink(`${JOBS()}/${name}.js`);
@@ -117,7 +145,7 @@ function forget(names) {
   if (!names.size) return;
   const history = shared("scheduler.history") ?? [], kept = history.filter((r) => names.has(r.bot));
   if (kept.length !== history.length) setShared("scheduler.history", kept);
-  for (const key of ["scheduler.seen", "scheduler.state", "scheduler.paused"]) {
+  for (const key of ["scheduler.seen", "scheduler.state", "scheduler.paused", "scheduler.overrides"]) {
     const all = Object.entries(shared(key) ?? {}), own = all.filter(([name]) => names.has(name));
     if (own.length !== all.length) setShared(key, Object.fromEntries(own));
   }

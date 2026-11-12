@@ -6,12 +6,22 @@ export const LANGUAGES = [["en", "English"], ["ko", "한글"]];
 
 const KO = {
   // The panel
-  "Scheduler": "스케줄러", "Settings": "설정", "Language": "언어", "Add schedule": "스케줄 추가", "New schedule": "새 스케줄", "Edit {0}": "{0} 수정",
+  "Scheduler": "스케줄러", "Settings": "설정", "Language": "언어", "Add schedule": "스케줄 추가", "Add script": "스크립트 추가", "New script": "새 스크립트",
+  "A script checks something on a schedule and reacts only to what is new.": "스크립트는 정해진 주기마다 무언가를 확인하고, 새로 생긴 일에만 반응합니다.",
+  "Check": "확인", "on its schedule": "정해진 주기마다", "New only": "새 항목만", "each item once": "항목마다 한 번",
+  "React": "반응", "an agent, or a note": "에이전트 또는 알림",
+  "Have an agent write it": "에이전트에게 맡기기",
+  "The prompt explains how scripts work and makes the agent ask you what to build.": "프롬프트가 스크립트의 동작 방식을 알려 주고, 무엇을 만들지는 에이전트가 되묻게 합니다.",
+  "Start in a new tab": "새 탭에서 시작", "Copy prompt": "프롬프트 복사", "Copied": "복사됨", "Show prompt": "프롬프트 보기", "Hide prompt": "프롬프트 숨기기",
+  "Write it by hand": "직접 만들기",
+  "Copy the example into the jobs folder and edit it. Its comments explain the format, and saving the file adds it here.":
+    "예제를 jobs 폴더로 복사해서 고치세요. 형식은 파일의 주석에 설명돼 있고, 저장하면 여기에 나타납니다.",
+  "New schedule": "새 스케줄", "Edit {0}": "{0} 수정",
   "{0} schedule": "스케줄 {0}개", "{0} schedules": "스케줄 {0}개", "Loading…": "불러오는 중…", "No schedules yet.": "아직 스케줄이 없습니다.",
   "A schedule is one JS file. Press Add schedule to make one, or copy one from mods/herdr-scheduler/examples/ to mods/herdr-scheduler/jobs/ and edit it; it shows up here when saved.":
     "스케줄 하나는 JS 파일 하나입니다. 스케줄 추가를 눌러 만들거나, mods/herdr-scheduler/examples/의 파일을 mods/herdr-scheduler/jobs/로 복사해서 고치세요. 저장하면 여기에 나타납니다.",
-  "code": "코드", "checked {0}": "{0} 확인", "Timeline": "타임라인", "now": "지금",
-  "Running": "실행 중", "Needs attention": "확인 필요", "Upcoming": "예정", "Paused": "일시 정지", "{0} item, {1} new": "항목 {0}개, 새 항목 {1}개",
+  "checked {0}": "{0} 확인", "Timeline": "타임라인", "now": "지금",
+  "Running": "실행 중", "Needs attention": "확인 필요", "Schedules": "스케줄", "Scripts": "스크립트", "Paused": "일시 정지", "{0} item, {1} new": "항목 {0}개, 새 항목 {1}개",
   "{0} items, {1} new": "항목 {0}개, 새 항목 {1}개",
   // When
   "just now": "방금", "{0}m ago": "{0}분 전", "{0}h ago": "{0}시간 전",
@@ -22,7 +32,7 @@ const KO = {
   "background": "백그라운드", "space": "스페이스", "worktree": "워크트리",
   // A schedule's page
   "Run now": "지금 실행", "Pause": "일시 정지", "Resume": "재개", "Edit": "수정", "Delete": "삭제", "Really delete": "정말 삭제",
-  "Schedule": "일정", "Next": "다음 실행", "Where": "위치", "Agent": "에이전트", "Runs": "실행 내용", "Checked": "확인",
+  "Schedule": "일정", "Next": "다음 실행", "Status": "상태", "On": "켜짐", "Where": "위치", "Agent": "에이전트", "Runs": "실행 내용", "Checked": "확인",
   "{0}, catches up within {1}m": "{0}, {1}분 안이면 따라잡음", "background, {0}": "백그라운드, {0}", "space {0}": "스페이스 {0}",
   "worktree {0} of {1}": "{1}의 워크트리 {0}", "code: poll, handle": "코드: poll, handle", "code: poll, handle, ended": "코드: poll, handle, ended",
   "not since the last reload": "다시 로드된 뒤 아직 없음", "History": "이력", "No runs yet.": "아직 실행 기록이 없습니다.",
@@ -32,8 +42,18 @@ const KO = {
   "Mo": "월", "Tu": "화", "We": "수", "Th": "목", "Fr": "금", "Sa": "토", "Su": "일",
   "Interval (5m, 2h, 1d)": "간격 (5m, 2h, 1d)", "Time (24h)": "시각 (24시간)", "Catch up a missed run within": "놓친 실행을 따라잡을 시간",
   "Folder": "폴더", "Run here": "여기서 실행", "Repository": "저장소", "This repository": "이 저장소", "Check out": "체크아웃",
-  "Commit": "커밋", "Branch": "브랜치", "Background": "백그라운드", "Space": "스페이스", "Worktree": "워크트리",
-  "Agent command": "에이전트 명령", "Prompt": "프롬프트", "Cancel": "취소", "Save": "저장", "Choose…": "선택…",
+  "Latest every run": "매번 최신 코드", "Keep a branch": "브랜치 유지", "Code to start from": "어떤 코드에서 시작할지",
+  "Branch or commit to check out": "받아 올 브랜치 또는 커밋", "Branch name": "브랜치 이름",
+  "No tab: the agent runs out of sight, and you read the run in this schedule's history.": "탭이 생기지 않습니다. 에이전트는 보이지 않는 곳에서 돌고, 실행 내용은 이 스케줄의 이력에서 봅니다.",
+  "A new tab in the space you pick.": "고른 스페이스에 새 탭으로 뜹니다.",
+  "A separate copy of the repository in its own space, so the agent never touches your working folder.": "저장소의 별도 사본을 만들어 그 스페이스에서 실행합니다. 지금 작업 중인 폴더는 건드리지 않습니다.",
+  "Before every run it fetches and checks out what you name here, so each run starts from the newest code. Nothing is committed to it.":
+    "실행할 때마다 여기 적은 것을 새로 받아 와서 시작합니다. 항상 최신 코드에서 출발하고, 이 사본에는 커밋이 쌓이지 않습니다.",
+  "The branch is made once from the repository's current code, then left as the agent leaves it: its commits stay for the next run.":
+    "브랜치를 처음 한 번만 만들고, 그 뒤로는 에이전트가 둔 상태 그대로 둡니다. 커밋이 다음 실행까지 남습니다.", "Background": "백그라운드", "Space": "스페이스", "Worktree": "워크트리",
+  "Agent command": "에이전트 명령", "Prompt": "프롬프트", "Cancel": "취소", "Save": "저장", "Model": "모델", "default model": "기본 모델", "Edit the command": "명령 직접 수정", "What": "무엇을", "When": "언제", "Who and where": "누가 어디서",
+  "next run in {0}": "다음 실행까지 {0}", "Reset to the file": "파일 값으로 되돌리기",
+  "Changed in the panel: the file has other values.": "패널에서 변경됨: 파일의 값과 다릅니다.", "Choose…": "선택…",
   "none, or 2h": "없음, 또는 2h", "optional: what this schedule is for": "선택: 이 스케줄이 하는 일",
   "What the agent is told on every run": "실행할 때마다 에이전트에게 보낼 말",
   // Notifications
@@ -48,7 +68,7 @@ const KO = {
   "where needs exactly one of background, space, worktree": "where에는 background, space, worktree 중 하나만 써야 합니다",
   "where.worktree needs repo": "where.worktree에는 repo가 필요합니다",
   'agent is a command, like ["claude", "--model", "haiku"]': 'agent는 ["claude", "--model", "haiku"] 같은 명령이어야 합니다',
-  "prompt is missing": "prompt가 없습니다", "name: letters, digits, - and _ only": "이름에는 영문, 숫자, -, _만 쓸 수 있습니다",
+  "prompt is missing": "prompt가 없습니다", "a name can't have / \\ : = in it or start with a dot": "이름에는 / \\ : = 를 쓸 수 없고, 점으로 시작할 수 없습니다",
   "the agent asked something before taking the prompt (a trust or permission dialog)": "에이전트가 프롬프트를 받기 전에 무언가를 물었습니다 (신뢰 또는 권한 확인 창)",
   "the agent exited before taking the prompt": "에이전트가 프롬프트를 받기 전에 종료됐습니다",
   "the agent wasn't ready after 2 minutes": "에이전트가 2분 안에 준비되지 않았습니다",

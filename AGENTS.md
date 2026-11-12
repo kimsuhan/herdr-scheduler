@@ -19,11 +19,14 @@ Built: prompt schedules, code schedules, the panel with its form, and the headle
   - `schedule.test.js`: `node --test` cases for `schedule.js`.
   - `i18n.js` and `i18n.test.js`: the panel's languages (English and Korean), and the test that every
     string the code shows has a text in each.
-  - `settings.svg`, `plus.svg`: the footer's icons.
+  - `prompt.js`: the prompt the Add script page gives an agent. It describes the script format, so it
+    changes whenever the format or `ctx` does.
+  - `settings.svg`, `plus.svg`, `script.svg`, `pencil.svg`, `trash.svg`: the icons.
   - `examples/`: example schedules. They ship inside the mod because whoever adds a mod copies only
     `mods/<name>/`.
   - `jobs/`: the user's schedules. Gitignored, never in this repo.
-- `README.md` and `README.ko.md` (same content in English and Korean).
+- `README.md` and `README.ko.md` (same content in English and Korean), and `docs/screens.png`, the four
+  screens the READMEs show.
 
 Split a file only when it earns it (`run.js` out of `engine.js` once the three places get long).
 
@@ -98,7 +101,10 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
   programs (`hc`, `git`, and whatever a schedule runs), schedules are arbitrary code the person puts in `jobs/`,
   it runs only while Herdr is open and a copy has been shown in the shown layout (a mod starts the
   first time it shows; `props: { headless: true }` is the copy for layouts that hide the panel).
-- `preview.png` is taken with example schedules only, on public repos.
+- `preview.png` is the gallery thumbnail: the product's name and a line at the left, a real screenshot of
+  the list at the right, generated from that screenshot. `docs/screens.png` is four real screenshots side
+  by side. Both show example schedules only, in English: move the real `jobs/` files away, copy examples
+  in, shoot within 30 seconds (before the first tick) and move them back. Retake both when a screen changes.
 
 ## Known gaps
 
@@ -106,10 +112,12 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - A background agent blocked on a permission question has no pane: it only shows in the panel.
 - An `agent` that reports no status (a plain shell) never gets its prompt: the run fails after 2 minutes.
 - The form writes a schedule as plain data: editing a hand-written file through it drops the file's comments.
-  It can't rename a schedule, and agent arguments with spaces need the file. There is no pause-all.
+  It can't rename a script (only a prompt schedule), and agent arguments with spaces need the file. There is no pause-all.
 - History in `shared` is capped at 50 per schedule. If redraw cost shows, move it to a file outside the mod folder.
 - A code schedule remembers 500 keys; a poll that keeps returning more than 500 distinct live keys hands the
   oldest out again. Nothing forgets a key on purpose, and removing a schedule leaves its `seen` and `state`.
 - `ctx.start` and `ctx.send` work in `handle` only. "Run now" runs a whole round, not one item.
 - A `handle` running over 5 minutes reads "interrupted" until it returns.
-- The form can't edit a code schedule (Edit is hidden for any file with functions).
+- The form can't make a code schedule or edit its code: for one it changes only the schedule and the about
+  line, as an override in shared `scheduler.overrides` (read through `current()` in `engine.js`), so the
+  file and what runs can differ.

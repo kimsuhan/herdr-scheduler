@@ -1,9 +1,10 @@
 # Scheduler
 
-A side panel that runs schedules: each schedule gives a coding agent a prompt at set times (every day at 09:00,
-weekdays, chosen days, every N minutes), in the background, in a new tab of a space, or in a git
-worktree. A code schedule instead polls for items at its times and handles each new one with its own
-code, which may start an agent or continue an earlier agent's conversation. A schedule is one JS file in the
+A side panel for automations: recurring schedules that give a coding agent a prompt at set times (every
+day at 09:00, weekdays, chosen days, every N minutes), in the background, in a new tab of a space, or in
+a git worktree. A code schedule, which the panel calls a script, instead polls for items at its times and
+handles each new one with its own code, which may start an agent or continue an earlier agent's
+conversation. A schedule is one JS file in the
 mod's `jobs/` folder, written by hand or by the panel's form; saving it is all the setup there is. The
 panel lists the schedules with their next run, makes, edits, runs or pauses one, and keeps each one's history.
 There is no daemon, cron entry or CLI: the mod is the scheduler, so schedules run while Herdr is open.
@@ -49,45 +50,89 @@ Top to bottom:
   1px by 5px `dim` tick every six cells, and under the line five 10px `dim` labels: the clock time at
   each tick ("06:00", "18:00") and "now". A dot's tooltip lists the times and names. Schedules that
   run more than hourly, and paused or broken ones, have no rings.
-- **Schedule list**, scrolling, in up to four sections in this order: Running (working or blocked),
-  Needs attention (broken, failed, missed, interrupted), Upcoming (soonest first), Paused. A section's
+- **Schedule list**, scrolling, in up to five sections in this order: Running (working or blocked),
+  Needs attention (broken, failed, missed, interrupted), Schedules (prompt schedules, soonest first),
+  Scripts (code schedules, by name), Paused. A section's
   name and count (10.5px semibold `dim`) show only when more than one section has rows. One row per
   file in `jobs/`: 8px side margin, 10px left and 8px right padding, 10px gaps, `rounded(8)`, a 2px
   left border, `hover` background on hover:
-  1. the name (13px medium, truncated) over one 11px `muted` line, the schedule and the place,
-     "weekdays 09:00 · background" ("· code" for a code schedule); when the file is broken or the last
-     run failed, that line is the reason in `ansi1`;
+  1. the name (13px medium, truncated) over one 11px `muted` line with the schedule only, "weekdays
+     09:00", "every 5m" (where it runs and its `about` are on its page); when the file is broken or the
+     last run failed, that line is the reason in `ansi1`;
   2. right-aligned: the time left as a timer in the terminal font, 12px (`foreground` in its last hour,
      else `muted`), "20:37:40", "2:40", or the state's word in its color in place of the timer; under
      it in 10.5px `dim` when the last run was, "1h ago", after a 5px dot (`ansi2` when it is done or
-     handled, `ansi1` when it failed, was missed or interrupted), or for a code schedule "checked 2m
-     ago";
+     handled, `ansi1` when it failed, was missed or interrupted). A code schedule that has made a round
+     and is in no state leads instead with "checked 2m ago" (11px `muted`) over its timer (10.5px
+     `dim`);
   3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover).
   A schedule in a state (running, blocked, paused, gone wrong) has a `raised` background and its left
   border in the state's color; the others are plain, with the border in `background`. A broken file
   has only the name and the reason.
 - **Empty**: "No schedules yet." and how to make one with "Add schedule" or copy one from `examples/` to `jobs/`.
 - **Footer**, on the list only, drawn like the two rows at the foot of Herdr's sidebar: 1px `border`
-  above, padding 8px sides, 4px top, 8px bottom; two 28px rows (`rounded(8)`, 8px padding, 9px gap, a
+  above, padding 8px sides, 4px top, 8px bottom; three 28px rows (`rounded(8)`, 8px padding, 9px gap, a
   14px icon then the label in 13px; `hover` background and `foreground` on hover): a gear and "Settings"
-  in `muted`, a plus and "Add schedule" in `dim`.
+  in `muted`, a plus and "Add schedule" in `dim`, code brackets and "Add script" in `dim`.
+- **Add script** (after clicking it), 14px padding, 12px gaps, top to bottom:
+  - one 13px line: "A script checks something on a schedule and reacts only to what is new.";
+  - three equal boxes in a row (1px `border`, `rounded(8)`, 8px padding): a 16px round `raised` chip with
+    the number, a 12px medium word, and a 10.5px `muted` line under it: 1 "Check" / "on its schedule",
+    2 "New only" / "each item once", 3 "React" / "an agent, or a note";
+  - a `raised` card (`rounded(10)`, 12px padding): "Have an agent write it" (13px medium) over an 11.5px
+    `muted` line; a 28px pill per installed agent with its program icon (`selected` with an `accent`
+    border when picked, else `background`); a full-width 32px `solid` button "Start in a new tab"; two
+    quiet text buttons, "Copy prompt" ("Copied" once pressed) and "Show prompt" / "Hide prompt", which
+    unfolds the prompt in a 220px scrolling `background` box, 11px in the terminal font. With no agent
+    installed the pills and the button are absent;
+  - a bordered card: "Write it by hand" over an 11.5px `muted` line, then two lines in the terminal
+    font, the example file's path and "→ …/jobs/<name>.js".
 - **Settings** (after clicking "Settings"): the header's "‹" and "Settings"; a "Language" label (11px
   semibold `dim`) over two pills, "English" and "한글".
-- **Detail** (after clicking a row), 14px padding, 10px gaps: "Run now" (`solid`), "Pause"/"Resume",
-  "Edit" and "Delete" buttons; the schedule's `about` line if it has one (12px `muted`); four lines Schedule,
-  Next, Where, Agent (64px `dim` label, value truncated); the prompt in a `raised` box, 12px `muted`;
-  "History" (11px semibold `dim`); one row per run, newest first: its state (70px), the trigger or the
-  failure, and when. A code schedule has no Edit, no Where, Agent or prompt, and a third line Runs, "code:
-  poll, handle" (", ended" when it has one), and a fourth, Checked, "2m ago: 3 items, 0 new" ("failed"
-  when the round threw, "not since the last reload" before its first); its rows show the item's key,
-  then ": " and the note when there is one.
-- **Form** ("Add schedule" or "Edit"), 14px padding: 11px semibold `dim` labels over 30px inputs (`rounded(7)`, 1px
-  `input` border, `surface`) and 24px pills (`selected` with an `accent` border when on). Top to bottom:
-  Name (new schedules only); About; Repeat pills Daily, Weekdays, Days, Every; day pills Mo to Su for Days;
-  Time and "Catch up a missed run within", or Interval for Every; Where pills Background, Space, Worktree with a
-  folder input and "Choose…", a pill per space on this machine, or a repository input with Commit/Branch
-  pills and a rev; Agent command; Prompt (a text area, 4 to 12 lines); a red line saying what is wrong;
-  Cancel and Save (`solid`).
+- **Detail** (after clicking a row), 14px padding, 10px gaps: three `raised` cards (`rounded(10)`, 12px
+  padding), each with an 11px semibold `dim` caption.
+  1. A top row: a pill switch (34px by 20px, `accent` with the 16px `background` knob at the right
+     when on, `input` with the knob at the left when paused) and beside it "On" or "Paused" (11.5px);
+     at the right a 24px pencil (tooltip "Edit") and a 24px bin (tooltip "Delete"; after one click it
+     turns `ansi1` and says "Really delete" beside it). Then the schedule's `about` line if it has one
+     (12px `muted`); "Next" over the timer to the next run,
+     22px in the terminal font, or "Status" over the state's word in its color, 20px medium, while it
+     is running, blocked, paused or gone wrong; under it the schedule in 11.5px `muted`, "daily 09:00,
+     catches up within 120m"; a full-width 32px `solid` "Run now"; and "Changed in
+     the panel: the file has other values." (11px `dim`) for a changed script.
+  2. "Prompt": the prompt in a `background` box (12px `muted`), then Agent and Where lines (64px `dim`
+     label, value truncated). For a code schedule "Runs" instead: Runs, "code: poll, handle" (", ended"
+     when it has one), and Checked, "2m ago: 3 items, 0 new" ("failed" when the round threw, "not
+     since the last reload" before its first).
+  3. "History", and at its right the last sixteen runs as a strip of 7px squares, newest at the right,
+     each in its state's color (`dim` when it has none); then one row per run, newest first: a 6px dot
+     and the state's word in its color (64px), the item's key and the note or else the trigger, and
+     when. "No runs yet." when there are none.
+  A broken file's page is one card: "Needs attention" with the pencil and the bin at its right, over
+  the error in `ansi1`.
+- **Form** ("Add schedule" or "Edit"), 14px padding, 10px gaps: three `raised` cards (`rounded(10)`,
+  12px padding), each headed by a 16px round `background` chip with its number and a 13px medium title.
+  Inputs are 30px (`rounded(7)`, 1px `input` border, `background`); labels are 11px semibold `dim`;
+  pills are 24px (`selected` with an `accent` border when on, else `background`).
+  1. "What": Name, Prompt (a text area, 4 to 12 lines), About.
+  2. "When": Repeat pills Daily, Weekdays, Days, Every; day pills Mo to Su for Days; side by side Time
+     (104px wide; Interval for Every) and "Catch up a missed run within"; under them in 11.5px `muted`
+     what it comes to as it is typed, "weekdays 09:00 · next run in 19:58:12" (absent while invalid).
+  3. "Who and where": Agent, a 28px pill per installed agent with its program icon. With one picked:
+     "Model" beside a 150px input (placeholder "default model"), then the command that comes of it as
+     11px `muted` text in the terminal font, "codex --no-daemon --model gpt-5", and at its right a 22px
+     pencil button (tooltip "Edit the command"). The pencil turns the text into the command input, for
+     a command of the person's own; picking a pill goes back. A saved command that isn't a known
+     agent's with at most `--model <x>` after it opens as the input; Where pills Background, Space, Worktree, and under them one 11px `muted`
+     sentence saying what the picked place is. Background: "Folder" over an input and "Choose…".
+     Space: a pill per space on this machine. Worktree: "Repository" over an input and "Choose…";
+     "Code to start from" over two pills, "Latest every run" (the file's `commit`) and "Keep a branch"
+     (`branch`), with a sentence on what the picked one does; "Branch or commit to check out" or
+     "Branch name" over an input; and the checkout's path in 10.5px `dim` terminal font,
+     "~/.herdr/worktrees/<repo>/<name>".
+  Under the cards a red line saying what is wrong, only once Save was pressed with something wrong; then
+  Cancel and a `solid` Save at the right ("Reset to the file" at the left for a changed script). A
+  script's form has card 1 with About only and card 2 without the catch-up field.
 
 ## How it behaves
 
@@ -136,13 +181,28 @@ Top to bottom:
 - History states: starting, running, blocked, done (the agent is idle again), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start cut off by a reload,
   or a `handle` running over 5 minutes), handled, skipped.
-- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. "Pause" stops
+- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. Turning the switch off stops
   scheduled runs and rounds of that schedule.
-- The form checks what is typed as it is typed and shows the first problem; Save does nothing while
-  there is one. Save writes `jobs/<name>.js` as `export default { … };` (JSON), which reloads the mod
-  and brings the list back with the schedule in it. A new schedule can't take a name that is there. "Edit" is
-  offered for schedules whose file has no functions; it keeps the name. "Delete" asks once ("Really delete"),
+- The form checks what is typed as it is typed. Pressing Save with something wrong shows the first
+  problem and saves nothing; from then on the line follows what is typed. Save writes `jobs/<name>.js` as `export default { … };` (JSON), which reloads the mod
+  and brings the list back with the schedule in it. A name can't be one that is there. It is the file's name and goes into
+  terminal labels, so it may be any text (Korean, spaces) without `/`, `\`, `:` or `=` and not starting
+  with a dot. Changing the name
+  in "Edit" moves the file (the new one is written, then the old one removed) and moves what shared
+  state keeps under the old name (slots, pause, seen keys, state, history rows), so the history stays.
+  For a code schedule, whose file has functions and can't be written back, "Edit" opens
+  a short form: About, Repeat and its time or interval only. Saving it writes no file: the values go
+  to shared `scheduler.overrides` and are laid over the file's in every copy at once, the detail then
+  says "Changed in the panel: the file has other values.", and the form gains "Reset to the file",
+  which drops them. The bin asks once ("Really delete"),
   then removes the file. "Choose…" opens the system's folder picker.
+- "Copy prompt" puts the prompt on the clipboard. "Start in a new tab" opens a tab named "New script"
+  in the shown space, in Herdr's home folder, running the picked agent with the prompt as its first
+  message, and closes the page. This is the one place the mod takes focus, since the person is about
+  to talk to that agent. The prompt is English whatever the panel's language, and tells the agent to
+  talk in the panel's language: it says where the examples and `jobs/` are, what a script is and may
+  use, to run `herdr-app check` afterwards, and above all to ask what the script should do before
+  writing anything, because the panel can't know that.
 - Picking a language sets shared `scheduler.lang` (`en` or `ko`; unset is English) and every copy of the
   panel redraws in it at once: labels, buttons, states, "5m ago" times ("5분 전"), schedules ("평일
   09:00", "5분마다"), validation and start failures, and notifications. Names, prompts, `about` lines,
@@ -162,8 +222,8 @@ Top to bottom:
 
 - One mod, `mods/herdr-scheduler/`, `mod.json` `{ "place": "right", "size": 340 }`. One optional prop,
   `headless: true`: that copy renders an empty `div()` and only runs the schedules. No layout, no keys, no
-  shipped mods. Art: `settings.svg` and `plus.svg`, the Lucide icons of those names (24px, stroke 2,
-  `currentColor`), drawn with `svg("mods/herdr-scheduler/<name>.svg")` so they take the text color.
+  shipped mods. Art: `settings.svg`, `plus.svg`, `script.svg`, `pencil.svg` and `trash.svg` (Lucide's settings, plus, code, pencil and trash-2 icons: 24px,
+  stroke 2, `currentColor`), drawn with `svg("mods/herdr-scheduler/<name>.svg")` so they take the text color.
 - `schedule.js`, pure: `duration("2h")`; `parse(schedule)` to `{ every: ms }` or `{ days, at: minutes }`;
   `slot(p, now)` and `next(p, now)` (`every` is counted from the epoch, times of day are local);
   `due(p, last, now, grace)`; `describe(p)`; `items(list)` (a poll's result checked); `remember(seen,
@@ -180,6 +240,7 @@ Top to bottom:
   last round found, kept in a module-level object); `setPaused(name, on)`; `check(bot)` (a code schedule
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.
+- `prompt.js`, pure: `scriptPrompt(dir, language)`, the text the Add script page shows, copies and sends.
 - `main.js`: the `View`, `cx.timer.every(30000)` for the engine and `cx.timer.every(1000)` to redraw the
   timers (not in the headless copy), the list, detail and form (`InputState`, `Input`,
   `TextareaState`, `Textarea` from `gpui-base`).
@@ -218,7 +279,8 @@ Top to bottom:
     `send(terminal, text)`: `hc send <t> <text>` (rejects if it fails), then `hc label <t>
     scheduler.run=<the item's row>`.
 - `herdr`: `hc`, `exec` (git), `appHome`, `home`, `shared`, `setShared`, `terminals`, `spaces`, `panes`,
-  `notify`, `run`, `theme`, `settings`, `pickFolder`, `props`. Commands: `terminal.peek`, `pane.focus`.
+  `notify`, `run`, `theme`, `settings`, `pickFolder`, `props`, `knownAgents`. Commands: `terminal.peek`,
+  `pane.focus`, `tab.new {name, folder, argv, task}`. `cx.write_to_clipboard(text)` copies.
 - `hc`: `run --bg --no-parent --json --cwd <dir> --label … -- <agent>`, `wait <t> --timeout 20 --json`,
   `send <t> <prompt> --if idle --json`, `send <t> <text>` (`ctx.send`), `label <t> k=v`, `read <t> --lines
   200`, `kill <t>`, `rm <t>`.
@@ -228,7 +290,8 @@ Top to bottom:
 - Shared state: `scheduler.slots` `{ name: ms }`, `scheduler.paused` `{ name: true }`, `scheduler.next`
   `{ name: ms }` (for other mods), `scheduler.history` (rows `{ id, bot, at, trigger, where?, status,
   item?, terminal?, note?, removed? }`, newest first, 50 per schedule), `scheduler.seen` `{ name: { key: ms } }`
-  (500 per schedule), `scheduler.state` `{ name: { key: value } }` (for other mods), `scheduler.lang`.
+  (500 per schedule), `scheduler.state` `{ name: { key: value } }` (for other mods), `scheduler.lang`, `scheduler.overrides`
+  `{ name: { schedule, about } }` (what the panel changed of a code schedule).
 
 ## Watch out
 
@@ -250,7 +313,8 @@ Top to bottom:
 - A schedule's seen keys go with its file: move a code schedule out of `jobs/` and back, and items still returned
   by its `poll` are handled again.
 - The headless copy relies on a floating block's mod starting although it draws nothing.
-- The form splits the agent command on spaces and can't rename; editing a hand-written file through it
+- The form splits the agent command on spaces. A script can't be renamed in the panel: its name is in
+  its threads' labels and may be what other mods read. Editing a hand-written file through it
   drops its comments.
 - A program that never reports a status (a plain shell as `agent`) is never "ready": the run fails after
   2 minutes. Schedules are for agents.
@@ -258,7 +322,7 @@ Top to bottom:
 - It assumes `hc` and `git` on the PATH Herdr uses, and spaces on this machine only.
 - A new string in the panel needs its text in every language of `i18n.js`, or it shows in English; the
   test catches a missing one only when the string is written as `L("…")`.
-- Not built: pause all, editing a code schedule in the form, `ctx.start`/`ctx.send` outside `handle`, running
+- Not built: pause all, editing a code schedule's code or making one in the form, `ctx.start`/`ctx.send` outside `handle`, running
   one item at once (only a whole round), forgetting a seen key except by the 500 cap.
 
 ## Done when
@@ -272,11 +336,11 @@ Top to bottom:
   "done", and the next run ends the first one's agent.
 - The same schedule with `where: { space: "<a space's name>" }` adds a tab to that space, and with
   `where: { worktree: { repo, branch } }` makes the checkout and a space on it; neither takes focus.
-- "Pause" stops the runs and shows "paused"; "Resume" brings the timer back.
+- Turning the switch off stops the runs and shows "paused"; turning it on brings the timer back.
 - "Settings" at the bottom of the list opens the settings; picking 한글 turns the whole panel Korean at
   once ("스케줄러", "스케줄 3개", "평일 09:00"), and English turns it back.
 - "Add schedule" with a name, Daily 09:00, Background and a prompt saves `jobs/<name>.js` and the schedule is in the list;
-  a time of 25:00 shows the problem and Save does nothing; "Delete" twice removes the file and the row.
+  a time of 25:00 shows the problem and Save does nothing; the bin pressed twice removes the file and the row.
 - A code schedule on `{ every: "1m" }` whose `poll` returns fixed items lists as "code"; each new key is
   handled once across rounds; an item whose `handle` calls `ctx.start({ where: { background: true },
   agent, prompt, thread })` gets its prompt answered and the terminal carries `scheduler.thread`; a later
