@@ -10,7 +10,8 @@ import { describe, next, parse } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
 import { scriptPrompt, editPrompt } from "./prompt.js";
 
-const TICK = 30_000;
+const TICK = 5_000;
+const SETTLE = 30_000; // no runs this soon after a load: a run of saves reloads the mod each time
 const REPEATS = [["daily", "Daily"], ["weekdays", "Weekdays"], ["days", "Days"], ["every", "Every"]];
 const PLACES = [["background", "Background"], ["space", "Space"], ["worktree", "Worktree"]];
 const DAYS = [[1, "Mo"], [2, "Tu"], [3, "We"], [4, "Th"], [5, "Fr"], [6, "Sa"], [0, "Su"]];
@@ -43,12 +44,14 @@ export default class Scheduler extends View {
     this.settings = false; // the settings page is shown
     this.guide = null; // the Add script page, while shown: { agents (installed, null while asked), agent, copied, shown (the prompt) }
     cx.spawn(async (cx) => { this.loaded = await load(); cx.notify(); });
-    // The first tick is a full TICK after a load: saving a file reloads the mod, and that shouldn't fire runs.
+    const loadedAt = Date.now();
     cx.timer.every(TICK, (cx) => {
-      if (!this.bots) return;
+      if (!this.bots || Date.now() - loadedAt < SETTLE) return;
       for (const [bot, trigger] of tick(this.bots)) this.go(bot, trigger, cx);
+      if (this.tidying) return; // the last tidy's hc calls can outlast a tick
+      this.tidying = true;
       const bots = this.bots;
-      cx.spawn(async (cx) => { await tidy(bots); cx.notify(); });
+      cx.spawn(async (cx) => { try { await tidy(bots); } finally { this.tidying = false; } cx.notify(); });
     });
     // The timers count seconds. Not in the headless copy, which draws nothing.
     if (!props()?.headless) cx.timer.every(1000, (cx) => cx.notify());

@@ -10,7 +10,7 @@ import { say } from "./i18n.js";
 // Notifications in the panel's language. History notes stay English and are translated when shown.
 const L = (key, ...args) => say(shared("scheduler.lang"), key, ...args);
 
-// A slot this late still runs without catchUp: a tick is 30s, and a reload delays one.
+// A slot this late still runs without catchUp: a reload holds runs back for 30s.
 const GRACE = 90_000;
 const HISTORY = 50; // rows kept per bot
 const KEPT = 5; // finished background terminals kept per bot, for reading back

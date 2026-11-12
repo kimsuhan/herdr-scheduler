@@ -143,7 +143,7 @@ Top to bottom:
   is broken, otherwise `idle`. The state's word takes the timer's place; with no word the timer counts
   down every second, `h:mm:ss` or `m:ss`. The detail's Next line shows the same timer.
 - Clicking a dot on the timeline opens the first schedule that ran or runs in that hour.
-- Every 30 seconds each schedule's current slot (the latest scheduled time that has passed) is compared with
+- Every 5 seconds each schedule's current slot (the latest scheduled time that has passed) is compared with
   the last slot seen. A new slot runs if it is at most 90 seconds old, or at most `catchUp` old when the
   schedule sets one (trigger "catch-up"); older than that it becomes a "missed" row. A schedule seen for the first
   time doesn't run until its next slot. A slot is skipped without a row while the schedule is paused or its
@@ -227,7 +227,9 @@ Top to bottom:
   terminals. Renaming a schedule relabels its live terminals, so they stay its own.
 - A schedule whose file is gone takes its history, seen keys, state and pause with it on the next tick
   (unless no schedule is left at all: an unreadable `jobs/` looks the same).
-- Saving a file in `jobs/` reloads the mod: the list follows at once and the next tick is 30 seconds later.
+- Saving a file in `jobs/` reloads the mod: the list follows at once and nothing runs, ends or is
+  dropped for the next 30 seconds, so a run of saves doesn't start runs that the next save cuts off. A
+  tidy whose `hc` calls are still going when the next tick comes is not started again.
 
 ## Built from
 

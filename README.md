@@ -94,6 +94,9 @@ export default {
 
 Worktrees go to `~/.herdr/worktrees/<repo>/<schedule name>`, where Herdr's own worktree mod puts them.
 
+A schedule runs up to 5 seconds after its time: the panel checks every 5 seconds. Saving a schedule
+reloads the mod, and nothing runs for 30 seconds after a reload.
+
 A schedule doesn't start a new run while its last one is still working or waiting on you. A background
 agent is ended as soon as its turn is over, so none sits in memory; its last screen stays readable from
 the history. One that is waiting on you stays until you answer it.
