@@ -99,6 +99,8 @@ export async function save(name, bot, was) {
       if (kept !== undefined) setShared(key, { ...rest, [name]: kept });
     }
     setShared("scheduler.history", (shared("scheduler.history") ?? []).map((r) => (r.bot === was ? { ...r, bot: name } : r)));
+    // Its live terminals follow too, or they would stop being its own to end.
+    for (const k of terminals()) if (k.state === "live" && k.labels?.["scheduler.bot"] === was) await hc(["label", k.address, `scheduler.bot=${name}`]);
   }
   await fs.writeFile(`${JOBS()}/${name}.js`, `export default ${JSON.stringify(bot, null, 2)};\n`);
   if (was && name !== was) await fs.unlink(`${JOBS()}/${was}.js`);
@@ -205,15 +207,34 @@ async function place(w, bot) {
   return { cwd: path, labels: [`herdr.space=${open?.id ?? `sp${hex(32)}`}`, tab] };
 }
 
-// Background runs have no pane to close, so each run tidies the ones before it: this bot's idle
-// agents are ended (not one holding a code bot's thread), and of the ended ones only the newest KEPT
-// stay readable.
+// Before a background run: any idle agent of this bot that tidy() hasn't ended yet goes (not one
+// holding a code bot's thread), and of the ended ones only the newest KEPT stay readable.
 async function reap(bot) {
   for (const k of terminals())
     if (k.state === "live" && k.labels?.["scheduler.bot"] === bot && !k.labels["herdr.tab"] && !k.labels["scheduler.thread"] && !going(k.status))
       await hc(["kill", k.address]);
   const old = (shared("scheduler.history") ?? []).filter((r) => r.bot === bot && r.where === "background" && r.terminal && !r.removed).slice(KEPT);
   for (const r of old) if ((await hc(["rm", r.terminal])).code === 0) patch(r.id, { removed: true }); // a live one stays for later
+}
+
+// Ends background agents that are through. An agent with no tab is a program holding memory that
+// nobody sees, so it goes as soon as its turn is over: its row is marked done first, and its last
+// screen stays readable from the history. One waiting on the person stays, and so does one holding a
+// thread (its conversation is continued). The agents of schedules that are gone go too, with their
+// terminals. Not with no schedules at all, which is also what an unreadable jobs/ folder looks like.
+export async function tidy(bots) {
+  const names = new Set(bots.map((b) => b.name));
+  if (!names.size) return;
+  for (const k of terminals()) {
+    const bot = k.labels?.["scheduler.bot"];
+    if (k.state !== "live" || !bot || k.labels["herdr.tab"] || k.labels["scheduler.thread"] || going(k.status)) continue;
+    if (!names.has(bot)) { await hc(["kill", k.address]); await hc(["rm", k.address]); continue; }
+    // Its prompt was sent and a turn has ended: not one still waiting for its prompt.
+    const row = (shared("scheduler.history") ?? []).find((r) => r.id === k.labels["scheduler.run"] && r.terminal === k.address);
+    if (row?.status !== "sent" || !(k.turn >= 1)) continue;
+    patch(row.id, { status: "done" });
+    await hc(["kill", k.address]);
+  }
 }
 
 // Waits until the agent takes input: `hc wait` returns once it reports idle. Short waits in a loop,
@@ -360,7 +381,7 @@ function api(bot, row) {
 // A history row's state now: what was recorded, or what its terminal is doing.
 export function state(row) {
   if (row.status === "starting") return Date.now() - row.at > 300_000 ? "interrupted" : "starting";
-  if (row.status !== "sent") return row.status; // failed, missed, handled, skipped
+  if (row.status !== "sent") return row.status; // failed, missed, handled, skipped, done (ended by tidy)
   const k = terminals().find((k) => k.address === row.terminal && k.labels?.["scheduler.run"] === row.id);
   if (!k || k.state !== "live") return "ended";
   return k.status === "working" ? "running" : k.status === "blocked" ? "blocked" : "done";

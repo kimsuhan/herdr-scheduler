@@ -4,8 +4,8 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
-import { hc, run, theme, settings, shared, setShared, spaces, pickFolder, props, appHome, home, knownAgents } from "herdr";
-import { load, tick, start, state, busy, setPaused, check, save, remove, lastRound, current, setOverride } from "./engine.js";
+import { hc, run, theme, settings, shared, setShared, spaces, terminals, pickFolder, props, appHome, home, knownAgents } from "herdr";
+import { load, tick, start, state, busy, setPaused, check, save, remove, lastRound, current, setOverride, tidy } from "./engine.js";
 import { describe, next, parse } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
 import { scriptPrompt, editPrompt } from "./prompt.js";
@@ -47,6 +47,8 @@ export default class Scheduler extends View {
     cx.timer.every(TICK, (cx) => {
       if (!this.bots) return;
       for (const [bot, trigger] of tick(this.bots)) this.go(bot, trigger, cx);
+      const bots = this.bots;
+      cx.spawn(async (cx) => { await tidy(bots); cx.notify(); });
     });
     // The timers count seconds. Not in the headless copy, which draws nothing.
     if (!props()?.headless) cx.timer.every(1000, (cx) => cx.notify());
@@ -81,7 +83,8 @@ export default class Scheduler extends View {
   show(row, cx) {
     const s = state(row);
     if (!row.terminal || s === "starting") return;
-    if (s === "running" || s === "blocked" || s === "done")
+    // Still there (a background agent is ended once its turn is over; its row stays "done").
+    if (terminals().some((k) => k.address === row.terminal && k.state === "live" && k.labels?.["scheduler.run"] === row.id))
       return run(row.where === "background" ? "terminal.peek" : "pane.focus", { terminal: row.terminal });
     if (this.output?.id === row.id) { this.output = null; return cx.notify(); }
     cx.spawn(async (cx) => {

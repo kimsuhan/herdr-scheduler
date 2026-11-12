@@ -179,7 +179,7 @@ Top to bottom:
   an error notification "<schedule> failed on <key>".
 - A `poll` or `ended` that throws ends the round. It is a "failed" row (trigger "poll") and an error
   notification "<schedule> failed", unless the schedule's newest row is already "failed" with the same message.
-- History states: starting, running, blocked, done (the agent is idle again), ended (its terminal is
+- History states: starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start cut off by a reload,
   or a `handle` running over 5 minutes), handled, skipped.
 - "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. Turning the switch off stops
@@ -218,9 +218,13 @@ Top to bottom:
 - Clicking a history row: a background run still alive opens in a peek (`terminal.peek`); a run in a
   tab is gone to (`pane.focus`); an ended run's last 200 lines are read back and shown under the row in
   the terminal font (click again to fold).
-- Before each background run, that schedule's earlier background agents that are no longer working are
-  ended, except one still holding a thread, and of its ended ones only the newest 5 stay readable (one
-  that `hc rm` refuses, still live, is tried again next time).
+- A background agent is ended as soon as its turn is over, on the next tick: it has no tab, so left
+  alive it is a program holding memory that nobody sees. Its row is marked "done" first and its last
+  screen stays readable from the history. One that is blocked (waiting on the person) stays, and so
+  does one holding a thread, whose conversation is continued. Of a schedule's ended background
+  terminals only the newest 5 are kept (`hc rm` for the rest, before its next background run).
+- The same tick ends the idle background agents of schedules that no longer exist, and removes their
+  terminals. Renaming a schedule relabels its live terminals, so they stay its own.
 - A schedule whose file is gone takes its history, seen keys, state and pause with it on the next tick
   (unless no schedule is left at all: an unreadable `jobs/` looks the same).
 - Saving a file in `jobs/` reloads the mod: the list follows at once and the next tick is 30 seconds later.
@@ -243,7 +247,7 @@ Top to bottom:
   message and fails if a language lacks one.
 - `engine.js`: `load()` reads `jobs/` with `fs/promises` `readdir` and imports each file with
   `import(["./jobs/", file].join(""))`; `tick(bots)` returns what to start; `start(bot, trigger)` (a run,
-  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `lastRound(name)` (what a code schedule's
+  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `tidy(bots)` (ends background agents that are through); `lastRound(name)` (what a code schedule's
   last round found, kept in a module-level object); `setPaused(name, on)`; `check(bot)` (a code schedule
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.

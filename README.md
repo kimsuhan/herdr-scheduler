@@ -94,8 +94,9 @@ export default {
 
 Worktrees go to `~/.herdr/worktrees/<repo>/<schedule name>`, where Herdr's own worktree mod puts them.
 
-A schedule doesn't start a new run while its last one is still working or waiting on you. Before a
-background run, its earlier idle background agents are ended, so they don't pile up.
+A schedule doesn't start a new run while its last one is still working or waiting on you. A background
+agent is ended as soon as its turn is over, so none sits in memory; its last screen stays readable from
+the history. One that is waiting on you stays until you answer it.
 
 ## Scripts
 
