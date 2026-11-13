@@ -250,6 +250,9 @@ async function ready(terminal) {
     if (w.status === "idle" || w.status === "done") return;
     if (w.status === "blocked") throw new Error("the agent asked something before taking the prompt (a trust or permission dialog)");
     if (w.exit_code != null || w.reason === "exit") throw new Error("the agent exited before taking the prompt");
+    // Claude's folder trust question reports no status, so only its screen tells.
+    if (/trust this folder/i.test((await hc(["read", terminal, "--lines", "40"])).stdout))
+      throw new Error("the agent asks whether to trust its folder: trust it once by hand, or give the run a cwd it trusts");
   }
   throw new Error("the agent wasn't ready after 2 minutes");
 }
@@ -264,7 +267,8 @@ async function launch(bot, { where: w, agent, prompt }, id, labels = []) {
   if (made.code !== 0) throw new Error(made.stderr.trim() || made.stdout.trim());
   const terminal = JSON.parse(made.stdout).address;
   patch(id, { terminal });
-  await ready(terminal);
+  // An agent that never took its prompt is ended: its row's last screen shows where it stopped.
+  try { await ready(terminal); } catch (e) { await hc(["kill", terminal]); throw e; }
   const sent = await hc(["send", terminal, prompt, "--if", "idle", "--json"]);
   if (sent.code !== 0) throw new Error(`the prompt wasn't sent: ${sent.stderr.trim() || sent.stdout.trim()}`);
   patch(id, { status: "sent" });
@@ -277,7 +281,7 @@ export async function start(bot, trigger) {
   if (active.has(bot.name)) return;
   active.add(bot.name);
   try {
-    if (bot.code) return await round(bot);
+    if (bot.code) return await round(bot, trigger === "manual");
     const id = hex(8);
     record({ id, bot: bot.name, at: Date.now(), trigger, where: where(bot.where), status: "starting" });
     try {
@@ -296,8 +300,9 @@ const checked = {};
 export const lastRound = (name) => checked[name];
 
 // A code bot's round: `ended` for each live terminal holding one of its threads (true lets it go),
-// then `poll`, then `handle` for each item whose key is new, while the bot isn't busy.
-async function round(bot) {
+// then `poll`, then `handle` for each item whose key is new, while the bot isn't busy. `manual` (Run
+// now) also hands an item whose last row failed to handle again.
+async function round(bot, manual) {
   try {
     const raw = bot.raw, prefix = `${bot.name}:`;
     if (raw.ended) for (const k of terminals()) {
@@ -311,7 +316,8 @@ async function round(bot) {
       if (busy(bot.name)) break; // the rest wait, unseen, for a later round
       // The key is written before anything is awaited, so of several copies of the mod only one handles it.
       const seen = shared("scheduler.seen") ?? {};
-      if (seen[bot.name]?.[item.key] != null) continue;
+      const failed = manual && (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name && r.item === item.key)?.status === "failed";
+      if (seen[bot.name]?.[item.key] != null && !failed) continue;
       setShared("scheduler.seen", { ...seen, [bot.name]: remember(seen[bot.name] ?? {}, item.key, Date.now()) });
       checked[bot.name].fresh++;
       if (await handle(bot, item)) break; // an agent just got work, and may not report working yet

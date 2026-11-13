@@ -74,6 +74,7 @@ const KO = {
   "the agent asked something before taking the prompt (a trust or permission dialog)": "에이전트가 프롬프트를 받기 전에 무언가를 물었습니다 (신뢰 또는 권한 확인 창)",
   "the agent exited before taking the prompt": "에이전트가 프롬프트를 받기 전에 종료됐습니다",
   "the agent wasn't ready after 2 minutes": "에이전트가 2분 안에 준비되지 않았습니다",
+  "the agent asks whether to trust its folder: trust it once by hand, or give the run a cwd it trusts": "에이전트가 폴더를 신뢰할지 묻고 있습니다: 그 폴더에서 한 번 직접 신뢰하거나, 이미 신뢰하는 폴더를 cwd로 지정하세요",
   "poll must return an array of items": "poll은 항목 배열을 돌려줘야 합니다",
   "every item poll returns needs a key": "poll이 돌려주는 모든 항목에는 key가 필요합니다",
 };

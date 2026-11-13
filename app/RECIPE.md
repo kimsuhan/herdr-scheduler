@@ -160,7 +160,10 @@ Top to bottom:
     the name) the branch is created from the repo's HEAD if new and left alone afterwards. If a space
     already shows that folder, the run is a new tab in it.
 - A run that can't start (no such space, git error, an agent that asks something before the prompt or
-  isn't ready in 2 minutes) is a "failed" row with the reason, and an error notification.
+  isn't ready in 2 minutes) is a "failed" row with the reason, and an error notification. Claude's
+  folder trust question reports no status, so after each 20-second wait the agent's last 40 lines are
+  read; "trust this folder" on them fails the run with its own reason. An agent that started but never
+  took its prompt is ended (`hc kill`), so clicking its row shows where it stopped.
 - A round that finds nothing new leaves no history row, so the panel keeps what each code schedule's last
   round found (how many items `poll` returned, how many were new) in memory and shows it as "checked".
   A reload forgets it until the next round.
@@ -185,7 +188,9 @@ Top to bottom:
 - History states: starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start or a `handle` cut off by a
   reload: a "starting" row whose schedule isn't running in this JS thread), handled, skipped.
-- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. A schedule is
+- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round, in which an
+  item whose newest row is "failed" is handled again although its key is seen (a scheduled round
+  passes it over). A schedule is
   running from that press (or its slot) until its run has got its prompt or its round is through (kept in
   memory, so a reload ends it), and also while it is busy; meanwhile the row reads "running" and neither
   starts it again. Turning the switch off stops
