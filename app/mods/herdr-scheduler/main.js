@@ -5,8 +5,8 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { hc, run, theme, settings, shared, setShared, spaces, terminals, pickFolder, props, appHome, home, knownAgents } from "herdr";
-import { load, tick, start, state, busy, running, setPaused, check, save, remove, lastRound, current, setOverride, tidy } from "./engine.js";
-import { describe, next, parse } from "./schedule.js";
+import { load, tick, start, state, busy, running, setPaused, check, save, remove, roundsOf, historyDays, historyDay, current, setOverride, tidy } from "./engine.js";
+import { describe, next, parse, keepDays, fold } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
 import { scriptPrompt, editPrompt } from "./prompt.js";
 
@@ -43,6 +43,7 @@ export default class Scheduler extends View {
     this.output = null; // { id, text }: an ended run's screen, read back
     this.form = null; // the new or edit form's fields, while it is shown
     this.settings = false; // the settings page is shown
+    this.past = null; // the All history page, while shown: { name, days (newest first, null while read), i, rows }
     this.guide = null; // the Add script page, while shown: { agents (installed, null while asked), agent, copied, shown (the prompt) }
     cx.spawn(async (cx) => { this.loaded = await load(); cx.notify(); });
     const loadedAt = Date.now();
@@ -66,11 +67,21 @@ export default class Scheduler extends View {
 
   // A code bot's last round, or null before its first: when ("2m ago") and what it found ("3 items, 0 new").
   checked(b) {
-    const c = lastRound(b.name);
-    return c && [ago(c.at), c.error ? L("failed") : L(c.items === 1 ? "{0} item, {1} new" : "{0} items, {1} new", c.items, c.fresh)];
+    const c = roundsOf(b.name)[0];
+    return c && [ago(c.at), this.found(c)];
   }
 
+  // What a round found, or "failed".
+  found(c) { return c.status === "failed" ? L("failed") : L(c.items === 1 ? "{0} item, {1} new" : "{0} items, {1} new", c.items, c.fresh); }
+
   history(name) { return (shared("scheduler.history") ?? []).filter((r) => r.bot === name); }
+
+  // A bot's runs and, for a script, its rounds, newest first. `failedOnly`: only the rounds that failed
+  // (for the strips and the timeline, where a round that went well would make every bar alike).
+  runs(name, failedOnly) {
+    const own = roundsOf(name).filter((r) => !failedOnly || r.status === "failed").map((r) => ({ ...r, bot: name }));
+    return [...this.history(name), ...own].sort((a, b) => b.at - a.at);
+  }
 
   // The last `n` runs as a strip of bars, oldest at the left: green went well, red went wrong, the
   // state's color while one is going. Slots with no run yet are small dots, so the strip keeps its width.
@@ -118,7 +129,7 @@ export default class Scheduler extends View {
       rev: w.worktree?.branch != null ? "branch" : "commit", folder: w.worktree?.name,
       name: input(bot?.name, "dependency-check"), time: input(s.daily ?? s.weekdays ?? s.at ?? "09:00", "09:00"),
       every: input(s.every ?? "30m", "30m"), catchUp: input(r.catchUp, L("none, or 2h")), cwd: input(w.cwd, "~"),
-      about: input(r.about, L("optional: what this schedule is for")),
+      about: input(r.about, L("optional: what this schedule is for")), keep: input(r.keepHistory, "30d"),
       repo: input(w.worktree?.repo, "~/code/my-repo"), ref: input(w.worktree?.commit ?? w.worktree?.branch, "origin/main"),
       agent: input((r.agent ?? []).join(" "), "claude --model haiku"),
       prompt: TextareaState.new({ placeholder: L("What the agent is told on every run"), value: r.prompt ?? "" }),
@@ -155,11 +166,13 @@ export default class Scheduler extends View {
   entry() {
     const f = this.form, v = (state) => state.value().trim(), time = v(f.time);
     const schedule = f.repeat === "every" ? { every: v(f.every) } : f.repeat === "days" ? { days: [...f.days].sort(), at: time } : { [f.repeat]: time };
-    if (f.code) return { about: v(f.about), schedule };
+    const keep = v(f.keep) ? { keepHistory: v(f.keep) } : {};
+    if (f.code) return { about: v(f.about), schedule, ...keep };
     return {
       ...(v(f.about) ? { about: v(f.about) } : {}),
       schedule,
       ...(v(f.catchUp) ? { catchUp: v(f.catchUp) } : {}),
+      ...keep,
       where: f.place === "space" ? { space: f.space }
         : f.place === "worktree" ? { worktree: { repo: v(f.repo), [f.rev]: v(f.ref), ...(f.folder ? { name: f.folder } : {}) } }
         : { background: true, ...(v(f.cwd) ? { cwd: v(f.cwd) } : {}) },
@@ -171,7 +184,7 @@ export default class Scheduler extends View {
   // What keeps the form from being saved, or null.
   problem() {
     const f = this.form, bot = this.entry();
-    if (f.code) { try { parse(bot.schedule); return null; } catch (e) { return L(String(e.message ?? e)); } }
+    if (f.code) { try { parse(bot.schedule); if (bot.keepHistory) keepDays(bot.keepHistory); return null; } catch (e) { return L(String(e.message ?? e)); } }
     if (!f.name.value().trim()) return L("name is missing");
     if (f.place === "space" && !f.space) return L("pick a space");
     if (f.place === "worktree" && !bot.where.worktree[f.rev]) return L("{0} is missing", f.rev);
@@ -187,6 +200,7 @@ export default class Scheduler extends View {
     if (this.guide) return this.card(t, L("Add script"), this.renderGuide(t), (cx) => { this.guide = null; cx.notify(); });
     if (this.settings) return this.card(t, L("Settings"), this.renderSettings(t), (cx) => { this.settings = false; cx.notify(); });
     if (this.form) return this.card(t, this.form.original ? L("Edit {0}", this.form.original) : L("New schedule"), this.renderForm(t), (cx) => { this.form = null; cx.notify(); });
+    if (this.past) return this.card(t, L("History of {0}", this.past.name), this.renderPast(t), (cx) => { this.past = null; this.output = null; cx.notify(); });
     const bot = this.open && this.bots?.find((b) => b.name === this.open);
     return this.card(t, bot ? bot.name : L("Scheduler"), bot ? this.detail(bot, t) : this.list(t),
       bot && ((cx) => { this.open = null; this.output = null; cx.notify(); }));
@@ -349,7 +363,8 @@ export default class Scheduler extends View {
         .child(h_flex().gap(10)
           .child(div().w(104).child(f.repeat === "every" ? field("Interval (5m, 2h, 1d)", input("f-every", f.every)) : field("Time (24h)", input("f-time", f.time))))
           .when(f.repeat !== "every" && !f.code, (el) => el.child(div().flex_1().child(field("Catch up a missed run within", input("f-catchup", f.catchUp))))))
-        .when(Boolean(comes), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(comes))))
+        .when(Boolean(comes), (el) => el.child(div().text_size(11.5).text_color(t.muted).child(comes)))
+        .child(div().w(104).child(field("Keep history", input("f-keep", f.keep)))))
       .when(!f.code, (el) => el.child(card(3, "Who and where")
         .child(v_flex().gap(6).child(label("Agent"))
           .when(Boolean(f.agents?.length), (e) => e.child(h_flex().flex_wrap().gap(6).children(f.agents.map((a) => {
@@ -423,7 +438,7 @@ export default class Scheduler extends View {
   // What a bot is doing, as a word and a color.
   status(b, t) {
     if (b.error) return ["broken", t.ansi1];
-    const last = this.history(b.name)[0], s = last && !last.recovered && state(last); // a failed poll a later round got past is over
+    const last = this.runs(b.name)[0], s = last && state(last);
     if (busy(b.name)?.status === "blocked") return ["blocked", t.blocked];
     if (running(b.name)) return ["running", t.working];
     if ((shared("scheduler.paused") ?? {})[b.name]) return ["paused", t.dim];
@@ -439,8 +454,7 @@ export default class Scheduler extends View {
   timeline(t) {
     const now = Date.now(), HOUR = 3_600_000, NOW = 6, start = Math.floor(now / HOUR) * HOUR - NOW * HOUR;
     const cells = Array.from({ length: 30 }, () => ({ ran: [], runs: [] })), paused = shared("scheduler.paused") ?? {};
-    const names = new Set(this.bots.map((b) => b.name));
-    for (const r of shared("scheduler.history") ?? []) if (r.at >= start && r.at <= now && names.has(r.bot)) cells[Math.floor((r.at - start) / HOUR)].ran.push(r);
+    for (const r of this.bots.flatMap((b) => this.runs(b.name, true))) if (r.at >= start && r.at <= now) cells[Math.floor((r.at - start) / HOUR)].ran.push(r);
     for (const b of this.bots) {
       if (b.error || paused[b.name] || b.schedule.every < HOUR) continue;
       for (let at = next(b.schedule, now); at < start + 30 * HOUR; at = next(b.schedule, at)) cells[Math.floor((at - start) / HOUR)].runs.push([b, at]);
@@ -498,7 +512,7 @@ export default class Scheduler extends View {
   // state's word) over how its last runs went. Schedules and scripts read the same. Only a schedule in a state stands out, with a raised
   // background and a bar in the state's color: the idle ones stay plain.
   row(b, t) {
-    const [word, color] = this.status(b, t), last = this.history(b.name)[0], s = last && !last.recovered && state(last);
+    const [word, color] = this.status(b, t), last = this.runs(b.name)[0], s = last && state(last);
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
     const meta = wrong ? L(wrong) : L(describe(b.schedule));
@@ -514,7 +528,7 @@ export default class Scheduler extends View {
           .child(word ? div().text_size(11).text_color(color).child(L(word))
             : div().font_family(mono).text_size(12).text_color(at - Date.now() < 3_600_000 ? t.foreground : t.muted).child(timer(at)))
           // How its last eight runs went (all dots before its first run).
-          .child(this.strip(this.history(b.name), 8, t)))
+          .child(this.strip(this.runs(b.name, true), 8, t)))
         // While it runs, a spinner that can't be pressed again.
         .child(div().id(`run-${b.name}`).size(24).flex_none().flex().items_center().justify_center().rounded(6).text_size(10)
           .text_color(t.dim).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -546,12 +560,11 @@ export default class Scheduler extends View {
     if (b.error) return v_flex().p(14).gap(10)
       .child(box().child(h_flex().gap(2).items_center().child(cap("Needs attention")).child(div().flex_1()).children(manage))
         .child(div().text_size(12).text_color(t.ansi1).child(L(b.error))));
-    const paused = Boolean((shared("scheduler.paused") ?? {})[b.name]), rows = this.history(b.name), [word, color] = this.status(b, t);
+    const paused = Boolean((shared("scheduler.paused") ?? {})[b.name]), [word, color] = this.status(b, t);
     const w = b.where ?? {}, place = w.background ? L("background, {0}", w.cwd ?? "~") : w.space != null ? L("space {0}", w.space)
       : w.worktree && L("worktree {0} of {1}", w.worktree.name ?? b.name, w.worktree.repo);
     const kv = (k, v) => h_flex().gap(8).text_size(12).child(div().w(64).flex_none().text_color(t.dim).child(L(k))).child(div().flex_1().min_w(0).truncate().child(v));
     const round = b.code && this.checked(b);
-    const tone = { running: t.working, blocked: t.blocked, done: t.ansi2, handled: t.ansi2, failed: t.ansi1, missed: t.ansi1, interrupted: t.ansi1 };
     return v_flex().p(14).gap(10)
       // When, large: the timer to the next run, or the state's word while it is in one.
       .child(box().gap(10)
@@ -585,20 +598,67 @@ export default class Scheduler extends View {
           .child(div().p(8).rounded(7).bg(t.background).text_size(12).text_color(t.muted).child(b.prompt))
           .child(kv("Agent", b.agent.join(" ")))
           .child(kv("Where", place)))
-      // How its runs went: the last ones as a strip (newest at the right), then each run.
+      // How its runs went: the last ones as a strip (newest at the right), then each run and round,
+      // how long they are kept, and the way to the older ones.
       .child(box()
-        .child(h_flex().gap(8).items_center().child(cap("History")).child(div().flex_1())
-          .child(this.strip(rows, 16, t)))
-        .children(rows.length ? rows.flatMap((r) => {
-          const s = state(r);
-          return [h_flex().id(`h-${r.id}`).gap(8).px(6).py(5).rounded(6).items_center().cursor_pointer().hover((st) => st.bg(t.hover))
-            .on_click((_e, cx) => this.show(r, cx))
-            .child(div().size(6).flex_none().rounded_full().bg(tone[s] ?? t.dim))
-            .child(div().w(64).flex_none().text_size(11.5).text_color(tone[s] ?? t.muted).child(L(s)))
-            .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child([r.item, r.note && L(r.note)].filter(Boolean).join(": ") || L(r.trigger)))
-            .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(r.at))),
-          ...(this.output?.id === r.id ? [div().p(8).rounded(7).bg(t.background).text_size(11).text_color(t.muted)
-            .font_family(mono).child(this.output.text)] : [])];
-        }) : [div().text_size(12).text_color(t.dim).child(L("No runs yet."))]));
+        .child(h_flex().gap(8).items_center().child(cap("History"))
+          .child(div().text_size(11).text_color(t.dim).child(L("kept {0} days", b.keep)))
+          .child(div().flex_1())
+          .child(this.strip(this.runs(b.name, true), 16, t)))
+        .children(this.entries(fold(this.runs(b.name)), t))
+        .child(h_flex().id("d-past").h(26).items_center().justify_center().rounded(7).text_size(11.5).text_color(t.muted).cursor_pointer()
+          .hover((st) => st.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => this.openPast(b.name, cx)).child(L("All history"))));
+  }
+
+  // History rows: the state, what it was about, when. A run's row opens its terminal or its last screen.
+  entries(list, t) {
+    if (!list.length) return [div().text_size(12).text_color(t.dim).child(L("No runs yet."))];
+    const mono = settings().font_family ?? "JetBrains Mono";
+    const tone = { running: t.working, blocked: t.blocked, done: t.ansi2, handled: t.ansi2, failed: t.ansi1, missed: t.ansi1, interrupted: t.ansi1 };
+    return list.flatMap((r) => {
+      const s = state(r);
+      const what = r.status === "checked" ? (r.count > 1 ? L("{0} rounds, nothing new since {1}", r.count, hm(new Date(r.from))) : this.found(r))
+        : [r.item, r.note && L(r.note)].filter(Boolean).join(": ") || L(r.trigger);
+      return [h_flex().id(`h-${r.id}`).gap(8).px(6).py(5).rounded(6).items_center().cursor_pointer().hover((st) => st.bg(t.hover))
+        .on_click((_e, cx) => this.show(r, cx))
+        .child(div().size(6).flex_none().rounded_full().bg(tone[s] ?? t.dim))
+        .child(div().w(64).flex_none().text_size(11.5).text_color(tone[s] ?? t.muted).child(L(s)))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(what))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(r.at))),
+      ...(this.output?.id === r.id ? [div().p(8).rounded(7).bg(t.background).text_size(11).text_color(t.muted)
+        .font_family(mono).child(this.output.text)] : [])];
+    });
+  }
+
+  // The All history page: one day at a time, newest first, read from the day files.
+  openPast(name, cx) {
+    const p = this.past = { name, days: null, i: 0, rows: null };
+    this.output = null;
+    cx.notify();
+    cx.spawn(async (cx) => { p.days = await historyDays(name); await this.readDay(p); cx.notify(); });
+  }
+
+  async readDay(p) {
+    p.rows = null;
+    p.rows = p.days[p.i] ? await historyDay(p.name, p.days[p.i]) : [];
+  }
+
+  renderPast(t) {
+    const p = this.past, day = p.days?.[p.i]?.replace(".jsonl", "");
+    const step = (id, label, to) => this.button(id, label, t, (cx) => {
+      if (to < 0 || to >= p.days.length) return;
+      p.i = to;
+      cx.spawn(async (cx) => { await this.readDay(p); cx.notify(); });
+      cx.notify();
+    });
+    return v_flex().p(14).gap(10)
+      .child(h_flex().gap(8).items_center()
+        .child(step("past-older", "‹", p.i + 1))
+        .child(div().flex_1())
+        .child(div().text_size(12.5).font_medium().child(day ?? ""))
+        .child(div().flex_1())
+        .child(step("past-newer", "›", p.i - 1)))
+      .child(v_flex().p(12).gap(2).rounded(10).bg(t.raised)
+        .children(p.rows ? this.entries(fold(p.rows), t) : [div().text_size(12).text_color(t.dim).child(L("Loading…"))]));
   }
 }

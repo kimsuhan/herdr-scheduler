@@ -19,6 +19,9 @@ export default {
   // Any schedule a prompt schedule takes.
   schedule: { every: "5m" },
 
+  // Optional: days of history kept, every round included (30 unless given).
+  keepHistory: "7d",
+
   // What there is now. Called with ctx, never with Herdr itself:
   //   ctx.exec(cmd, args, { cwd, timeout })  runs a program: { code, stdout, stderr }. It is stopped
   //     after `timeout` ms, 30000 unless given (at most 600000): give more to a slow download.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { duration, parse, slot, next, due, describe, items, remember } from "./schedule.js";
+import { duration, parse, slot, next, due, describe, items, remember, dayFile, keepDays, expired, rows, fold } from "./schedule.js";
 
 // Local-time dates, so the cases hold in any time zone. 2026-11-12 is a Thursday.
 const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime();
@@ -75,4 +75,24 @@ test("remember", () => {
   assert.deepEqual(remember({}, "a", 1), { a: 1 });
   assert.deepEqual(remember({ a: 1 }, "b", 2), { a: 1, b: 2 });
   assert.deepEqual(remember({ b: 3, a: 1, c: 2 }, "d", 4, 3), { c: 2, b: 3, d: 4 }); // the oldest goes
+});
+
+test("history files: day, keep, expired", () => {
+  assert.equal(dayFile(at(3, 23, 59)), "2026-11-03.jsonl");
+  assert.equal(keepDays("30d"), 30);
+  for (const bad of ["12h", "0d", "30"]) assert.throws(() => keepDays(bad));
+  const files = ["2026-10-12.jsonl", "2026-10-13.jsonl", "2026-11-12.jsonl", "notes.txt"];
+  assert.deepEqual(expired(files, 30, at(12, 10)), ["2026-10-12.jsonl"]);
+});
+
+test("history rows: newest first, each id once, broken lines passed over", () => {
+  const text = ['{"id":"a","at":1,"status":"starting"}', '{"id":"b","at":2}', '{"id":"a","at":1,"status":"done"}', '{"id":"c",', ""].join("\n");
+  assert.deepEqual(rows(text), [{ id: "b", at: 2 }, { id: "a", at: 1, status: "done" }]);
+  assert.deepEqual(rows(null), []);
+});
+
+test("fold: rounds in a row with nothing new are one row", () => {
+  const c = (at, fresh = 0) => ({ id: String(at), at, status: "checked", items: 1, fresh });
+  const folded = fold([c(5), c(4), c(3, 1), { id: "x", at: 2, status: "done" }, c(1), c(0)]);
+  assert.deepEqual(folded.map((r) => [r.at, r.count ?? 1, r.from]), [[5, 2, 4], [3, 1, undefined], [2, 1, undefined], [1, 2, 0]]);
 });

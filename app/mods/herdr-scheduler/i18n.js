@@ -39,6 +39,9 @@ const KO = {
   "worktree {0} of {1}": "{1}의 워크트리 {0}", "code: poll, handle": "코드: poll, handle", "code: poll, handle, ended": "코드: poll, handle, ended",
   "not since the last reload": "다시 로드된 뒤 아직 없음", "History": "이력", "No runs yet.": "아직 실행 기록이 없습니다.",
   "This run's terminal is gone.": "이 실행의 터미널은 없어졌습니다.",
+  "checked": "확인함", "kept {0} days": "{0}일 보관", "All history": "전체 이력", "History of {0}": "{0} 이력",
+  "{0} rounds, nothing new since {1}": "{1}부터 {0}회 확인, 새 항목 없음",
+  "Keep history": "이력 보관", "keepHistory is whole days, like 30d": "이력 보관 기간은 30d처럼 일 단위로 씁니다",
   // The form
   "Name": "이름", "About": "설명", "Repeat": "반복", "Daily": "매일", "Weekdays": "평일", "Days": "요일 선택", "Every": "간격",
   "Mo": "월", "Tu": "화", "We": "수", "Th": "목", "Fr": "금", "Sa": "토", "Su": "일",

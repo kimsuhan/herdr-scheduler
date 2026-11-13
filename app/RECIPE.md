@@ -21,7 +21,9 @@ its own JavaScript** inside Herdr on every round, with **whatever programs it ca
 before putting it in `jobs/`. The mod reads the folder `~/.herdr/worktrees/<repo>/<name>` to see if a
 checkout exists. It reaches no network itself (`git fetch`, the agents and a code schedule's programs do).
 The only files it writes or deletes are the schedules in its own `jobs/` folder, when you save or delete one
-in the form; its state is in Herdr's shared state under `scheduler.*`.
+in the form, and its history, one file per schedule and day under `~/.config/herdr-app/data/herdr-scheduler/history/`
+(item keys and programs' error output are in it; removing the mod leaves it there). Its other state is in
+Herdr's shared state under `scheduler.*`.
 
 Schedules run only while Herdr is open and a copy of this mod has been shown once in the shown layout. A
 panel that isn't always shown (a child of a stack, a pane in another tab) only starts when someone looks
@@ -106,10 +108,15 @@ Top to bottom:
   2. "Prompt": the prompt in a `background` box (12px `muted`), then Agent and Where lines (64px `dim`
      label, value truncated). For a code schedule "Runs" instead: Runs, "code: poll, handle" (", ended"
      when it has one), and Checked, "2m ago: 3 items, 0 new" ("failed" when the round threw, "not
-     since the last reload" before its first).
-  3. "History", and at its right the last sixteen runs as the same strip of bars as on the list; then one row per run, newest first: a 6px dot
-     and the state's word in its color (64px), the item's key and the note or else the trigger, and
-     when. "No runs yet." when there are none.
+     since the last reload" before its first round today).
+  3. "History", "kept 30 days" (11px `dim`), and at its right the last sixteen runs and failed rounds as the
+     same strip of bars as on the list; then one row per run and round, newest first: a 6px dot
+     and the state's word in its color (64px), the item's key and the note (a round: what it found;
+     rounds in a row that found nothing new are one row, "12 rounds, nothing new since 09:00"), or else the
+     trigger, and when. "No runs yet." when there are none. Last, a 26px "All history" row (11.5px `muted`).
+- **All history**: titled "History of <name>" with the back button. A row with "‹" (an older day), the
+  day (`2026-11-13`, 12.5px medium) and "›" (a newer day), over a `raised` card of that day's rows, drawn
+  as on the schedule's page. It opens on the newest day that has any.
   A broken file's page is one card: "Needs attention" with the pencil and the bin at its right, over
   the error in `ansi1`.
 - **Form** ("Add schedule" or "Edit"), 14px padding, 10px gaps: three `raised` cards (`rounded(10)`,
@@ -119,7 +126,8 @@ Top to bottom:
   1. "What": Name, Prompt (a text area, 4 to 12 lines), About.
   2. "When": Repeat pills Daily, Weekdays, Days, Every; day pills Mo to Su for Days; side by side Time
      (104px wide; Interval for Every) and "Catch up a missed run within"; under them in 11.5px `muted`
-     what it comes to as it is typed, "weekdays 09:00 · next run in 19:58:12" (absent while invalid).
+     what it comes to as it is typed, "weekdays 09:00 · next run in 19:58:12" (absent while invalid); then
+     "Keep history" (104px, placeholder "30d", written as `keepHistory` when filled; a script's form has it too).
   3. "Who and where": Agent, a 28px pill per installed agent with its program icon. With one picked:
      "Model" beside a 150px input (placeholder "default model"), then the command that comes of it as
      11px `muted` text in the terminal font, "codex --no-daemon --model gpt-5", and at its right a 22px
@@ -164,9 +172,11 @@ Top to bottom:
   folder trust question reports no status, so after each 20-second wait the agent's last 40 lines are
   read; "trust this folder" on them fails the run with its own reason. An agent that started but never
   took its prompt is ended (`hc kill`), so clicking its row shows where it stopped.
-- A round that finds nothing new leaves no history row, so the panel keeps what each code schedule's last
-  round found (how many items `poll` returned, how many were new) in memory and shows it as "checked".
-  A reload forgets it until the next round.
+- Every round of a code schedule is a history row (`round: true`, status "checked" with how many items
+  `poll` returned and how many were new, or "failed" with the message). Rounds don't go into shared state (a
+  write every round would redraw every mod): they are written to the day file and kept in memory, newest
+  first, 50 per schedule, and after a reload today's are read back from the file. The strips and the timeline
+  show only the failed ones.
 - A code schedule's slot runs one round instead of a run. A late slot simply runs (no "missed" rows, no
   catch-up), and a busy schedule still runs its rounds. Two rounds of one schedule never overlap. A round:
   1. If the schedule has `ended`, it is called for each live terminal labelled `scheduler.thread=<name>:<thread>`;
@@ -183,11 +193,24 @@ Top to bottom:
   returns the row follows the terminal `ctx.start` or `ctx.send` gave it, like a prompt run's, or reads
   "handled"; `ctx.skip` makes it "skipped" with the reason; a throw makes it "failed" with the message and
   an error notification "<schedule> failed on <key>".
-- A `poll` or `ended` that throws ends the round. It is a "failed" row (trigger "poll") and an error
-  notification "<schedule> failed", unless the schedule's newest row is already "failed" with the same message.
-  A later `poll` that works marks that row `recovered: true`: it stays "failed" in the history, but the
-  row and the page no longer read "failed", and the same message failing again is a new row.
-- History states: starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
+- A `poll` or `ended` that throws ends the round: a "failed" round row, and an error notification
+  "<schedule> failed" unless the round before failed with the same message. What a schedule's row and page
+  say comes from its newest row, run or round, so a round that works again ends the "failed".
+- History is kept in `data/herdr-scheduler/history/<name>/<YYYY-MM-DD>.jsonl` under Herdr's home (outside
+  the mod folder, since a write inside it reloads the mod), a row per line without `bot`, in the local day of
+  its `at`; a `note` is cut to 2000 characters. Shared state keeps each schedule's newest 50 runs (they are
+  patched as they go, and finished background agents are found through them); on every tick the ones past
+  that, and those of schedules no longer in `jobs/`, are added to their day file and then dropped from shared
+  state. Rounds go to the file as they end. A write is `writeTextFile(path, old + lines, old)` from a
+  cached copy of the file, one at a time through a single queue; when the file changed under it, it is read
+  again once. Reading a file keeps each `id` once (a reload between the write and the drop writes rows again)
+  and passes over a broken line.
+- `keepHistory` (default `"30d"`, whole days only) is how long a schedule's day files stay: once a day
+  (and after a load), day files older than that are deleted. A folder whose schedule is gone keeps 30
+  days, then goes. Deleting a schedule in the panel deletes its history at once; a file that is only moved
+  out of `jobs/` keeps it. Renaming one in the form moves its day files to the new name first, joined to
+  what is already there.
+- History states: checked (a round), starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start or a `handle` cut off by a
   reload: a "starting" row whose schedule isn't running in this JS thread), handled, skipped.
 - "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round, in which an
@@ -254,7 +277,10 @@ Top to bottom:
 - `schedule.js`, pure: `duration("2h")`; `parse(schedule)` to `{ every: ms }` or `{ days, at: minutes }`;
   `slot(p, now)` and `next(p, now)` (`every` is counted from the epoch, times of day are local);
   `due(p, last, now, grace)`; `describe(p)`; `items(list)` (a poll's result checked); `remember(seen,
-  key, now, cap = 500)` (the seen keys with one added, the oldest dropped past the cap).
+  key, now, cap = 500)` (the seen keys with one added, the oldest dropped past the cap); `dayFile(at)`;
+  `keepDays("30d")`; `expired(files, keep, now)` (the day files before the day `keep` days back);
+  `rows(text)` (a day file's rows, newest first, each id once); `fold(rows)` (rounds in a row with nothing new as one row
+  with `count` and `from`).
   `schedule.test.js` covers them with `node --test`.
 - `i18n.js`, pure: `LANGUAGES`; `say(lang, key, ...args)`, where the English text in the code is the key
   and `{0}`, `{1}` are filled in. A language is a map from key to text plus patterns for messages with a
@@ -263,8 +289,9 @@ Top to bottom:
   message and fails if a language lacks one.
 - `engine.js`: `load()` reads `jobs/` with `fs/promises` `readdir` and imports each file with
   `import(["./jobs/", file].join(""))`; `tick(bots)` returns what to start; `start(bot, trigger)` (a run,
-  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `tidy(bots)` (ends background agents that are through); `lastRound(name)` (what a code schedule's
-  last round found, kept in a module-level object); `setPaused(name, on)`; `check(bot)` (a code schedule
+  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `tidy(bots)` (ends background agents that are through, then moves rows to the day files and deletes
+  expired ones); `running(name)`; `roundsOf(name)` (a code schedule's rounds, newest first, kept in a
+  module-level object); `historyDays(name)` and `historyDay(name, file)` (for All history); `setPaused(name, on)`; `check(bot)` (a code schedule
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.
 - `prompt.js`, pure: `scriptPrompt(dir, language)`, the text the Add script page shows, copies and sends,
@@ -278,6 +305,7 @@ Top to bottom:
     about: "…",                        // optional: a line shown on the schedule's page (code schedules too)
     schedule: { weekdays: "09:00" },   // { daily } | { days: [1, 3], at } (0 = Sunday) | { every: "30m" }
     catchUp: "2h",                     // optional
+    keepHistory: "30d",                // optional, whole days (code schedules too)
     where: { background: true, cwd: "~/code/my-repo" },
                                        // { space: "<name or id>", cwd? } | { worktree: { repo, commit | branch, name? } }
     agent: ["claude", "--model", "haiku"],
@@ -306,7 +334,7 @@ Top to bottom:
     the label `scheduler.thread=<name>:<thread>`; resolves with the address, rejects with the reason.
     `send(terminal, text)`: `hc send <t> <text>` (rejects if it fails), then `hc label <t>
     scheduler.run=<the item's row>`.
-- `herdr`: `hc`, `exec` (git), `appHome`, `home`, `shared`, `setShared`, `terminals`, `spaces`, `panes`,
+- `herdr`: `hc`, `exec` (git), `appHome`, `home`, `shared`, `setShared`, `readTextFile`, `writeTextFile`, `terminals`, `spaces`, `panes`,
   `notify`, `run`, `theme`, `settings`, `pickFolder`, `props`, `knownAgents`. Commands: `terminal.peek`,
   `pane.focus`, `tab.new {name, folder, argv, task}`. `cx.write_to_clipboard(text)` copies.
 - `hc`: `run --bg --no-parent --json --cwd <dir> --label … -- <agent>`, `wait <t> --timeout 20 --json`,
@@ -317,9 +345,9 @@ Top to bottom:
   `scheduler.thread=<name>:<thread>`, which a person may also put on a terminal by hand.
 - Shared state: `scheduler.slots` `{ name: ms }`, `scheduler.paused` `{ name: true }`, `scheduler.next`
   `{ name: ms }` (for other mods), `scheduler.history` (rows `{ id, bot, at, trigger, where?, status,
-  item?, terminal?, note?, removed? }`, newest first, 50 per schedule), `scheduler.seen` `{ name: { key: ms } }`
+  item?, terminal?, note?, removed? }`, newest first, 50 per schedule; older ones are in the day files), `scheduler.seen` `{ name: { key: ms } }`
   (500 per schedule), `scheduler.state` `{ name: { key: value } }` (for other mods), `scheduler.lang`, `scheduler.overrides`
-  `{ name: { schedule, about } }` (what the panel changed of a code schedule).
+  `{ name: { schedule, about, keepHistory? } }` (what the panel changed of a code schedule).
 
 ## Watch out
 
@@ -338,6 +366,8 @@ Top to bottom:
 - Every `setShared` redraws every mod. Write `scheduler.slots` and `scheduler.next` only when they
   differ from what is there.
 - A save in the mod's folder reloads it, so the only writes are the form's, and state never goes there.
+  `data/` is outside it: writing there reloads nothing. `writeTextFile` makes missing folders;
+  `readTextFile` reads at most 1 MiB, which is why history is a file per day.
 - A schedule's seen keys go with its file: move a code schedule out of `jobs/` and back, and items still returned
   by its `poll` are handled again.
 - The headless copy relies on a floating block's mod starting although it draws nothing.

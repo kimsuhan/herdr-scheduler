@@ -1,10 +1,12 @@
 // The engine: loads bots from jobs/, decides which are due, starts them, keeps history.
-// State is in shared "scheduler.*": slots (the last slot seen per bot), paused, history, next, and for
-// code bots seen (the item keys handled) and state (each bot's own store).
+// State is in shared "scheduler.*": slots (the last slot seen per bot), paused, history (the newest
+// runs), next, and for code bots seen (the item keys handled) and state (each bot's own store). All
+// history is kept in day files under data/herdr-scheduler/history/<bot>/, outside the mod folder (a
+// write inside it reloads the mod).
 
 import * as fs from "fs/promises";
-import { hc, exec, appHome, home, shared, setShared, terminals, spaces, panes, notify } from "herdr";
-import { parse, due, next, duration, items, remember } from "./schedule.js";
+import { hc, exec, appHome, home, shared, setShared, terminals, spaces, panes, notify, readTextFile, writeTextFile } from "herdr";
+import { parse, due, next, duration, items, remember, dayFile, keepDays, expired, rows } from "./schedule.js";
 import { say } from "./i18n.js";
 
 // Notifications in the panel's language. History notes stay English and are translated when shown.
@@ -12,7 +14,8 @@ const L = (key, ...args) => say(shared("scheduler.lang"), key, ...args);
 
 // A slot this late still runs without catchUp: a reload holds runs back for 30s.
 const GRACE = 90_000;
-const HISTORY = 50; // rows kept per bot
+const HISTORY = 50; // rows per bot in shared; older ones move to the day files
+const KEEP = 30; // days of history kept when a bot doesn't say
 const KEPT = 5; // finished background terminals kept per bot, for reading back
 const going = (status) => status === "working" || status === "blocked";
 const expand = (p) => (p === "~" ? home() : p.startsWith("~/") ? home() + p.slice(1) : p);
@@ -21,6 +24,7 @@ const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16
 export const where = (w) => (w.background ? "background" : w.space != null ? "space" : "worktree");
 
 const JOBS = () => `${appHome()}/mods/herdr-scheduler/jobs`;
+const HISTORY_DIR = () => `${appHome()}/data/herdr-scheduler/history`;
 
 // A run's where, agent and prompt (a prompt bot's, or a code bot's ctx.start), checked.
 function runnable({ where: w, agent, prompt }) {
@@ -37,16 +41,16 @@ function runnable({ where: w, agent, prompt }) {
 export function check(bot) {
   if (!bot || typeof bot !== "object") throw new Error("no default export");
   if (bot.about != null && typeof bot.about !== "string") throw new Error("about is a line of text");
-  const about = bot.about?.trim() || null;
+  const about = bot.about?.trim() || null, keep = bot.keepHistory == null ? KEEP : keepDays(bot.keepHistory);
   if (bot.poll != null || bot.handle != null) {
     if (typeof bot.poll !== "function" || typeof bot.handle !== "function") throw new Error("a code schedule needs poll and handle functions");
     if (bot.ended != null && typeof bot.ended !== "function") throw new Error("ended must be a function");
-    return { schedule: parse(bot.schedule), code: true, about };
+    return { schedule: parse(bot.schedule), code: true, about, keep };
   }
   runnable(bot);
   return {
     schedule: parse(bot.schedule), catchUp: bot.catchUp == null ? 0 : duration(bot.catchUp),
-    where: bot.where, agent: bot.agent, prompt: bot.prompt, about,
+    where: bot.where, agent: bot.agent, prompt: bot.prompt, about, keep,
   };
 }
 
@@ -63,6 +67,10 @@ export async function load() {
       bots.push({ name, raw, ...check(raw) });
     } catch (e) { bots.push({ name, raw, error: String(e.message ?? e) }); }
   }
+  // A reload forgets the rounds: today's come back from the day file.
+  for (const b of bots) if (b.code) {
+    try { rounds[b.name] = rows(await readTextFile(`${HISTORY_DIR()}/${b.name}/${dayFile(Date.now())}`)).filter((r) => r.round).slice(0, HISTORY); } catch {}
+  }
   return bots;
 }
 
@@ -74,7 +82,9 @@ export function current(bots) {
   return bots.map((b) => {
     const o = b.code && over[b.name];
     if (!o) return b;
-    try { return { ...b, schedule: parse(o.schedule), about: o.about?.trim() || null, changed: true }; } catch { return b; } // a bad override: the file's
+    try {
+      return { ...b, schedule: parse(o.schedule), about: o.about?.trim() || null, keep: o.keepHistory == null ? b.keep : keepDays(o.keepHistory), changed: true };
+    } catch { return b; } // a bad override: the file's
   });
 }
 
@@ -94,6 +104,7 @@ export async function save(name, bot, was) {
   if (name !== was && await fs.exists(`${JOBS()}/${name}.js`)) throw new Error(`a schedule named ${name} is already there`);
   await fs.mkdir(JOBS(), { recursive: true }).catch(() => {}); // already there
   if (was && name !== was) {
+    await moveHistory(was, name); // before the write below, which reloads the mod
     for (const key of ["scheduler.slots", "scheduler.paused", "scheduler.seen", "scheduler.state"]) {
       const { [was]: kept, ...rest } = shared(key) ?? {};
       if (kept !== undefined) setShared(key, { ...rest, [name]: kept });
@@ -106,7 +117,110 @@ export async function save(name, bot, was) {
   if (was && name !== was) await fs.unlink(`${JOBS()}/${was}.js`);
 }
 
-export const remove = (name) => fs.unlink(`${JOBS()}/${name}.js`);
+// Deletes a bot: its file and all its history. (A file that is only gone, moved away for a while, keeps
+// its history until it expires.)
+export async function remove(name) {
+  setShared("scheduler.history", (shared("scheduler.history") ?? []).filter((r) => r.bot !== name));
+  const dir = `${HISTORY_DIR()}/${name}`;
+  for (const f of await list(dir)) await fs.unlink(`${dir}/${f}`);
+  await fs.rmdir(dir).catch(() => {}); // none
+  files.clear();
+  await fs.unlink(`${JOBS()}/${name}.js`);
+}
+
+// The day files of a bot (or the bot folders, for HISTORY_DIR), none when the folder isn't there.
+async function list(dir) {
+  try { return (await fs.readdir(dir)).map((f) => f.name ?? f).sort(); } catch { return []; }
+}
+
+// A renamed bot's day files go to its new name, joined to what a bot of that name left there.
+async function moveHistory(from, to) {
+  const src = `${HISTORY_DIR()}/${from}`;
+  for (const f of await list(src)) {
+    const old = await fs.readFile(`${src}/${f}`, "utf8"), there = await readTextFile(`${HISTORY_DIR()}/${to}/${f}`);
+    await writeTextFile(`${HISTORY_DIR()}/${to}/${f}`, (there ?? "") + old, there);
+    await fs.unlink(`${src}/${f}`);
+  }
+  await fs.rmdir(src).catch(() => {}); // none
+  files.clear();
+}
+
+// Each day file as last read or written, and one queue for every write: copies of the mod share this
+// thread, so the queue keeps them in order; `expected` catches a write of an older load still landing.
+const files = new Map();
+let queue = Promise.resolve();
+
+// Adds rows (without `bot`, the folder says it) to their bot's day files.
+function append(bot, list) {
+  const job = queue.then(async () => {
+    const byFile = new Map();
+    for (const { bot: _, ...r } of list) {
+      const file = dayFile(r.at), line = JSON.stringify(r.note?.length > 2000 ? { ...r, note: r.note.slice(0, 2000) } : r);
+      byFile.set(file, (byFile.get(file) ?? "") + line + "\n");
+    }
+    for (const [file, text] of byFile) {
+      const path = `${HISTORY_DIR()}/${bot}/${file}`;
+      // ponytail: readTextFile reads up to 1 MiB, so a day file past that can't take more rows; a day
+      // of 1-minute rounds is about 140 KB. If it shows, split a day file.
+      for (let tries = 0; ; tries++) {
+        if (!files.has(path)) files.set(path, await readTextFile(path));
+        const old = files.get(path);
+        try { await writeTextFile(path, (old ?? "") + text, old); files.set(path, (old ?? "") + text); break; }
+        catch (e) { files.delete(path); if (tries) throw e; } // changed under us: read it again, once
+      }
+    }
+  });
+  queue = job.catch(() => {});
+  return job;
+}
+
+// Moves rows out of shared into the day files: those past a bot's newest HISTORY, and those of bots
+// that are gone. Written first and dropped after, so a reload in between writes them again (reading
+// drops the repeat).
+let archiving = false; // copies of the mod each tick: one archive at a time, or rows are written twice
+async function archive(names) {
+  if (archiving) return;
+  archiving = true;
+  try {
+    const count = {}, out = new Map();
+    for (const r of shared("scheduler.history") ?? [])
+      if (!names.has(r.bot) || (count[r.bot] = (count[r.bot] ?? 0) + 1) > HISTORY) out.set(r.bot, [...(out.get(r.bot) ?? []), r]);
+    const done = new Set();
+    for (const [bot, list] of out) {
+      try { await append(bot, list); for (const r of list) done.add(r.id); } catch {} // stays in shared: next tick tries again
+    }
+    if (done.size) setShared("scheduler.history", (shared("scheduler.history") ?? []).filter((r) => !done.has(r.id)));
+  } finally { archiving = false; }
+}
+
+// Removes day files older than each bot's keepHistory. A folder whose bot is gone keeps KEEP days,
+// then goes.
+let pruned = null;
+async function prune(bots) {
+  const today = dayFile(Date.now());
+  if (pruned === today) return;
+  pruned = today;
+  files.clear();
+  const keep = Object.fromEntries(bots.map((b) => [b.name, b.keep ?? KEEP]));
+  for (const bot of await list(HISTORY_DIR())) {
+    const dir = `${HISTORY_DIR()}/${bot}`, all = await list(dir), old = expired(all, keep[bot] ?? KEEP, Date.now());
+    for (const f of old) await fs.unlink(`${dir}/${f}`);
+    if (!(bot in keep) && old.length === all.length) await fs.rmdir(dir).catch(() => {}); // not empty: something else is in it
+  }
+}
+
+// A bot's history day by day for the panel: the days there are, newest first, and one day's rows
+// (with what shared still holds of that day), newest first.
+export async function historyDays(name) {
+  const days = new Set((await list(`${HISTORY_DIR()}/${name}`)).filter((f) => f.endsWith(".jsonl")));
+  for (const r of shared("scheduler.history") ?? []) if (r.bot === name) days.add(dayFile(r.at));
+  return [...days].sort().reverse();
+}
+export async function historyDay(name, file) {
+  const own = (shared("scheduler.history") ?? []).filter((r) => r.bot === name && dayFile(r.at) === file);
+  const kept = rows(await readTextFile(`${HISTORY_DIR()}/${name}/${file}`)).map((r) => ({ ...r, bot: name }));
+  return rows([...kept, ...own].map((r) => JSON.stringify(r)).join("\n"));
+}
 
 // A live terminal of this bot (one it started, or one holding one of its threads) that is still
 // working or waiting on someone.
@@ -144,12 +258,11 @@ export function tick(bots, now = Date.now()) {
   return todo;
 }
 
-// Drops what deleted bots left in shared: their history, seen keys, state and pause. Not with no
-// bots at all, which is also what a jobs/ folder that couldn't be read looks like.
+// Drops what deleted bots left in shared: their seen keys, state and pause (their history moves to
+// the day files, in archive). Not with no bots at all, which is also what a jobs/ folder that couldn't
+// be read looks like.
 function forget(names) {
   if (!names.size) return;
-  const history = shared("scheduler.history") ?? [], kept = history.filter((r) => names.has(r.bot));
-  if (kept.length !== history.length) setShared("scheduler.history", kept);
   for (const key of ["scheduler.seen", "scheduler.state", "scheduler.paused", "scheduler.overrides"]) {
     const all = Object.entries(shared(key) ?? {}), own = all.filter(([name]) => names.has(name));
     if (own.length !== all.length) setShared(key, Object.fromEntries(own));
@@ -157,9 +270,7 @@ function forget(names) {
 }
 
 function record(...rows) {
-  const count = {};
-  setShared("scheduler.history", [...rows, ...(shared("scheduler.history") ?? [])]
-    .filter((r) => (count[r.bot] = (count[r.bot] ?? 0) + 1) <= HISTORY));
+  setShared("scheduler.history", [...rows, ...(shared("scheduler.history") ?? [])]);
 }
 
 function patch(id, fields) {
@@ -228,6 +339,8 @@ async function reap(bot) {
 export async function tidy(bots) {
   const names = new Set(bots.map((b) => b.name));
   if (!names.size) return;
+  await archive(names);
+  await prune(bots);
   for (const k of terminals()) {
     const bot = k.labels?.["scheduler.bot"];
     if (k.state !== "live" || !bot || k.labels["herdr.tab"] || k.labels["scheduler.thread"] || going(k.status)) continue;
@@ -281,7 +394,7 @@ export async function start(bot, trigger) {
   if (active.has(bot.name)) return;
   active.add(bot.name);
   try {
-    if (bot.code) return await round(bot, trigger === "manual");
+    if (bot.code) return await round(bot, trigger);
     const id = hex(8);
     record({ id, bot: bot.name, at: Date.now(), trigger, where: where(bot.where), status: "starting" });
     try {
@@ -294,15 +407,21 @@ export async function start(bot, trigger) {
   } finally { active.delete(bot.name); }
 }
 
-// What each code bot's last round found, { at, items, fresh } or { at, error }: a round with nothing
-// new leaves no history row, so this is how the panel shows it ran. In memory: a reload forgets it.
-const checked = {};
-export const lastRound = (name) => checked[name];
+// Each code bot's rounds, newest first: { id, at, trigger, round: true, status: "checked", items, fresh }
+// or status "failed" with the note. A round goes to the day file and stays here, not in shared: a
+// setShared every round would redraw every mod. load() brings today's back after a reload.
+const rounds = {};
+export const roundsOf = (name) => rounds[name] ?? [];
+function noteRound(bot, row) {
+  rounds[bot] = [row, ...roundsOf(bot)].slice(0, HISTORY);
+  append(bot, [row]).catch(() => {}); // ponytail: a round line that can't be written is only in memory
+}
 
 // A code bot's round: `ended` for each live terminal holding one of its threads (true lets it go),
-// then `poll`, then `handle` for each item whose key is new, while the bot isn't busy. `manual` (Run
-// now) also hands an item whose last row failed to handle again.
-async function round(bot, manual) {
+// then `poll`, then `handle` for each item whose key is new, while the bot isn't busy. Run now
+// (trigger "manual") also hands an item whose last row failed to handle again. Every round is a line.
+async function round(bot, trigger) {
+  const at = Date.now(), manual = trigger === "manual";
   try {
     const raw = bot.raw, prefix = `${bot.name}:`;
     if (raw.ended) for (const k of terminals()) {
@@ -311,10 +430,7 @@ async function round(bot, manual) {
       if (await raw.ended(thread.slice(prefix.length), api(bot.name))) await hc(["label", k.address, "scheduler.thread="]);
     }
     const found = items(await raw.poll(api(bot.name)));
-    // A poll that works again ends the failure the newest row reports (a round with nothing new adds no row).
-    const last = (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name);
-    if (last?.status === "failed" && last.item == null && !last.recovered) patch(last.id, { recovered: true });
-    checked[bot.name] = { at: Date.now(), items: found.length, fresh: 0 };
+    let fresh = 0;
     for (const item of found) {
       if (busy(bot.name)) break; // the rest wait, unseen, for a later round
       // The key is written before anything is awaited, so of several copies of the mod only one handles it.
@@ -322,17 +438,15 @@ async function round(bot, manual) {
       const failed = manual && (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name && r.item === item.key)?.status === "failed";
       if (seen[bot.name]?.[item.key] != null && !failed) continue;
       setShared("scheduler.seen", { ...seen, [bot.name]: remember(seen[bot.name] ?? {}, item.key, Date.now()) });
-      checked[bot.name].fresh++;
+      fresh++;
       if (await handle(bot, item)) break; // an agent just got work, and may not report working yet
     }
+    noteRound(bot.name, { id: hex(8), at, trigger, round: true, status: "checked", items: found.length, fresh });
   } catch (e) {
-    // A poll or ended failing every round is one row and one notification until the message changes.
-    const note = String(e.message ?? e), last = (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name);
-    checked[bot.name] = { at: Date.now(), error: note };
-    if (last?.status !== "failed" || last.note !== note || last.recovered) {
-      record({ id: hex(8), bot: bot.name, at: Date.now(), trigger: "poll", status: "failed", note });
-      notify({ title: L("{0} failed", bot.name), body: L(note), level: "error" });
-    }
+    // A poll or ended failing every round notifies once, until the message changes.
+    const note = String(e.message ?? e), last = roundsOf(bot.name)[0];
+    if (last?.status !== "failed" || last.note !== note) notify({ title: L("{0} failed", bot.name), body: L(note), level: "error" });
+    noteRound(bot.name, { id: hex(8), at, trigger, round: true, status: "failed", note });
   }
 }
 

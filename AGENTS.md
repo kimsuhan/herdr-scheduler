@@ -33,7 +33,8 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 ## Rules
 
 - The mod is the whole product. Don't add a CLI, a daemon, an install script or a config file outside
-  the mod folder. If something seems to need one, stop and raise it.
+  the mod folder. If something seems to need one, stop and raise it. The one write outside it is history:
+  day files under `data/herdr-scheduler/history/` in Herdr's home (a write in the mod folder reloads the mod).
 - Schedules load only from `jobs/` inside the mod folder: Herdr blocks imports from outside it, and
   `new Function` is disabled. A broken schedule file stops that schedule only and shows in the panel.
 - The schedule file format and `ctx` are the public API: adding a field is cheap, changing or removing one
@@ -48,7 +49,8 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
   own folder only when the person saves or deletes a schedule in the form (`jobs/<name>.js`, and the reload is
   how the list updates), and the first tick is a full 30 seconds after a load.
 - State goes in `shared` under `scheduler.*` (`slots`, `paused`, `next`, `history`, `seen`, `state`). Every
-  `setShared` redraws every mod: write only when something changed, never on each tick.
+  `setShared` redraws every mod: write only when something changed, never on each tick. That is why a
+  code schedule's rounds go to the day files and memory, not to `shared`.
 - Every run goes through one `hc run --bg --no-parent`. A tab or a space is made by the labels
   `herdr.space` and `herdr.tab` (an unknown id becomes a new one), which doesn't take focus. Don't use
   `space.new` or `tab.new`: they do.
@@ -115,7 +117,8 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - An `agent` that reports no status (a plain shell) never gets its prompt: the run fails after 2 minutes.
 - The form writes a schedule as plain data: editing a hand-written file through it drops the file's comments.
   It can't rename a script (only a prompt schedule), and agent arguments with spaces need the file. There is no pause-all.
-- History in `shared` is capped at 50 per schedule. If redraw cost shows, move it to a file outside the mod folder.
+- History in `shared` is the newest 50 runs per schedule; older ones and every round are in day files. A day
+  file can't pass 1 MiB (`readTextFile`): rows past that stay in `shared` and the write keeps failing.
 - A code schedule remembers 500 keys; a poll that keeps returning more than 500 distinct live keys hands the
   oldest out again. Nothing forgets a key on purpose, and removing a schedule leaves its `seen` and `state`.
 - `ctx.start` and `ctx.send` work in `handle` only. "Run now" runs a whole round, not one item.

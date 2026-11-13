@@ -25,8 +25,11 @@ There are two kinds of things it runs:
   and a model; the form shows the next run as you type.
 - **A prompt for scripts.** Add script hands an agent a prompt that explains how scripts work and makes
   it ask what you want built. Copy it, or start an agent with it in one click.
-- **History you can open.** Every run is a row. A background run opens in a peek, a run in a tab is gone
-  to, and an ended run's last screen is read back into the panel.
+- **History you can open.** Every run is a row, and so is every round of a script, even one that found
+  nothing new, so you can see it is running. A background run opens in a peek, a run in a tab is gone
+  to, and an ended run's last screen is read back into the panel. All history goes day by day.
+  History is kept per schedule and day in `~/.config/herdr-app/data/herdr-scheduler/history/`, for
+  `keepHistory` days (30 unless the schedule says).
 - **English and Korean.**
 
 ## How it differs from a daemon
@@ -88,6 +91,7 @@ export default {
 | `schedule` | `{ daily: "09:00" }`, `{ weekdays: "09:00" }`, `{ days: [1, 3], at: "09:00" }` (0 = Sunday), `{ every: "30m" }` (`m`, `h`, `d`) |
 | `about` | optional: a line shown on the schedule's page |
 | `catchUp` | optional, `"2h"`: a run missed by less than this still runs. Without it a missed run stays missed |
+| `keepHistory` | optional, `"30d"` (the default): how many days of history to keep. Whole days only |
 | `where` | `{ background: true, cwd }`, `{ space: "<name or id>" }`, `{ worktree: { repo, commit } }` or `{ worktree: { repo, branch } }` |
 | `agent` | the command to start, as an array |
 | `prompt` | sent once the agent is ready |

@@ -33,7 +33,7 @@ test("each language has every key the code uses", () => {
   for (const m of code.matchAll(/\bL\((?:[^"'`()]*\? )?"((?:[^"\\]|\\.)*)"(?: : "((?:[^"\\]|\\.)*)")?/g)) for (const k of m.slice(1)) if (k) used.add(k.replace(/\\(.)/g, "$1"));
   for (const m of code.matchAll(/new Error\((["'])((?:(?!\1)[^\\]|\\.)*)\1\)/g)) used.add(m[2].replace(/\\(.)/g, "$1"));
   for (const m of code.matchAll(/\[(?:"[a-z]+"|\d), "([A-Z][A-Za-z]+)"\]/g)) used.add(m[1]); // the form's pills
-  for (const word of ["broken", "blocked", "running", "paused", "failed", "missed", "interrupted", "starting", "done", "ended", "handled", "skipped",
+  for (const word of ["broken", "blocked", "running", "paused", "failed", "missed", "interrupted", "starting", "done", "ended", "handled", "skipped", "checked",
     "schedule", "catch-up", "manual", "poll", "background", "space", "worktree"]) used.add(word);
   assert.ok(used.size > 80, `found only ${used.size} keys: the scan is broken`);
   for (const [lang] of LANGUAGES.filter(([l]) => l !== "en")) {

@@ -94,3 +94,48 @@ export function describe(p) {
   const days = p.days.join(""), at = `${pad2(Math.floor(p.at / 60))}:${pad2(p.at % 60)}`;
   return `${days === "0123456" ? "daily" : days === "12345" ? "weekdays" : p.days.map((d) => DAY[d]).join(", ")} ${at}`;
 }
+
+// History files: one per schedule and local day, a row per line (JSON).
+
+// The day file a row at `at` goes to: "2026-11-13.jsonl".
+export function dayFile(at) {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}.jsonl`;
+}
+
+// keepHistory ("30d") as days. Files are by day, so it is whole days.
+export function keepDays(text) {
+  const ms = duration(text);
+  if (ms % UNIT.d) throw new Error("keepHistory is whole days, like 30d");
+  return ms / UNIT.d;
+}
+
+// The day files to remove when `keep` days are kept: those before the day `keep` days back.
+export function expired(files, keep, now) {
+  const d = new Date(now);
+  d.setDate(d.getDate() - keep);
+  const cut = dayFile(d.getTime());
+  return files.filter((f) => /^\d{4}-\d\d-\d\d\.jsonl$/.test(f) && f < cut);
+}
+
+// A history file's rows, newest first, each id once. A row is written again when a reload cut its
+// first write off, and a broken line (a write cut off) is passed over.
+export function rows(text) {
+  const byId = new Map();
+  for (const line of (text ?? "").split("\n")) {
+    try { const r = JSON.parse(line); if (r?.id) byId.set(r.id, r); } catch {}
+  }
+  return [...byId.values()].sort((a, b) => b.at - a.at);
+}
+
+// Rows for showing (newest first): rounds in a row that found nothing new are one row, with how many
+// (`count`) and when the first was (`from`).
+export function fold(list) {
+  const out = [];
+  for (const r of list) {
+    const last = out[out.length - 1], empty = r.status === "checked" && !r.fresh;
+    if (empty && last?.status === "checked" && !last.fresh) { last.count = (last.count ?? 1) + 1; last.from = r.at; }
+    else out.push({ ...r });
+  }
+  return out;
+}
