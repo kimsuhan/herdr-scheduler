@@ -486,19 +486,16 @@ export default class Scheduler extends View {
         div().flex_1().min_w(0).child(i === NOW ? L("now") : hm(new Date(start + i * HOUR))))));
   }
 
-  // The list, by what needs a look first: running, then gone wrong, then the two kinds apart (prompt
-  // schedules by when they run next, code schedules that watch for items), then paused. A section is
-  // named only when there is more than one.
+  // The list: the two kinds apart (prompt schedules by when they run next, code schedules that watch for
+  // items), then paused. A schedule stays in its place while it runs or after it went wrong: its row
+  // says so. A section is named only when there is more than one.
   list(t) {
     if (!this.bots) return div().p(14).text_color(t.dim).child(L("Loading…"));
     if (!this.bots.length) return v_flex().p(14).gap(6).text_size(12).text_color(t.muted)
       .child(div().text_color(t.foreground).child(L("No schedules yet.")))
       .child(L("A schedule is one JS file. Press Add schedule to make one, or copy one from mods/herdr-scheduler/examples/ to mods/herdr-scheduler/jobs/ and edit it; it shows up here when saved."));
-    const now = Date.now(), groups = { Running: [], "Needs attention": [], Schedules: [], Scripts: [], Paused: [] };
-    for (const b of this.bots) {
-      const [word] = this.status(b, t);
-      groups[word === "running" || word === "blocked" ? "Running" : word === "paused" ? "Paused" : word ? "Needs attention" : b.code ? "Scripts" : "Schedules"].push(b);
-    }
+    const now = Date.now(), groups = { Schedules: [], Scripts: [], Paused: [] }, paused = shared("scheduler.paused") ?? {};
+    for (const b of this.bots) groups[paused[b.name] ? "Paused" : b.code ? "Scripts" : "Schedules"].push(b);
     groups.Schedules.sort((a, b) => next(a.schedule, now) - next(b.schedule, now));
     const shown = Object.entries(groups).filter(([, bots]) => bots.length);
     return v_flex().pb(8).child(this.timeline(t)).children(shown.flatMap(([name, bots]) => [
@@ -510,9 +507,12 @@ export default class Scheduler extends View {
 
   // One schedule: its name over when it runs, and on the right the timer to its next run (or its
   // state's word) over how its last runs went. Schedules and scripts read the same. Only a schedule in a state stands out, with a raised
-  // background and a bar in the state's color: the idle ones stay plain.
+  // background and a bar in the state's color: the idle ones stay plain. A running one only turns its
+  // ▶ into a spinner.
   row(b, t) {
-    const [word, color] = this.status(b, t), last = this.runs(b.name)[0], s = last && state(last);
+    let [word, color] = this.status(b, t);
+    if (word === "running") word = null; // the spinner says it
+    const last = this.runs(b.name)[0], s = last && state(last);
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
     const meta = wrong ? L(wrong) : L(describe(b.schedule));

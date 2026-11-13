@@ -52,9 +52,9 @@ Top to bottom:
   1px by 5px `dim` tick every six cells, and under the line five 10px `dim` labels: the clock time at
   each tick ("06:00", "18:00") and "now". A dot's tooltip lists the times and names. Schedules that
   run more than hourly, and paused or broken ones, have no rings.
-- **Schedule list**, scrolling, in up to five sections in this order: Running (working or blocked),
-  Needs attention (broken, failed, missed, interrupted), Schedules (prompt schedules, soonest first),
-  Scripts (code schedules, by name), Paused. A section's
+- **Schedule list**, scrolling, in up to three sections in this order: Schedules (prompt schedules,
+  soonest first), Scripts (code schedules, by name), Paused. A schedule stays in its section while it runs
+  or after it went wrong. A section's
   name and count (10.5px semibold `dim`) show only when more than one section has rows. One row per
   file in `jobs/`: 8px side margin, 10px left and 8px right padding, 10px gaps, `rounded(8)`, a 2px
   left border, `hover` background on hover:
@@ -70,8 +70,8 @@ Top to bottom:
   3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover). While the schedule
      is running (see "▶" and "Run now" below) it is a braille spinner (`.frames`, 90ms, 13px `working`)
      that can't be pressed.
-  A schedule in a state (running, blocked, paused, gone wrong) has a `raised` background and its left
-  border in the state's color; the others are plain, with the border in `background`. A broken file
+  A schedule in a state (blocked, paused, gone wrong) has a `raised` background and its left
+  border in the state's color (a running one keeps its timer and plain look: only its "▶" spins); the others are plain, with the border in `background`. A broken file
   has only the name and the reason.
 - **Empty**: "No schedules yet." and how to make one with "Add schedule" or copy one from `examples/` to `jobs/`.
 - **Footer**, on the list only, drawn like the two rows at the foot of Herdr's sidebar: 1px `border`
@@ -148,8 +148,8 @@ Top to bottom:
 
 ## How it behaves
 
-- A row's left border and the word in place of its timer say what a schedule is doing: `working` color and "running" while its agent
-  works, `blocked` color and "blocked" while it waits on the person, `dim` and "paused", `ansi1` and
+- A row's left border and the word in place of its timer say what a schedule is doing (on its page, "Status"
+  says the same, and `working` color and "running" while it runs): `blocked` color and "blocked" while it waits on the person, `dim` and "paused", `ansi1` and
   "failed", "missed" or "interrupted" when the last run went wrong, `ansi1` and the error when the file
   is broken, otherwise `idle`. The state's word takes the timer's place; with no word the timer counts
   down every second, `h:mm:ss` or `m:ss`. The detail's Next line shows the same timer.
