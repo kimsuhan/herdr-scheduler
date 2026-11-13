@@ -185,6 +185,8 @@ Top to bottom:
   an error notification "<schedule> failed on <key>".
 - A `poll` or `ended` that throws ends the round. It is a "failed" row (trigger "poll") and an error
   notification "<schedule> failed", unless the schedule's newest row is already "failed" with the same message.
+  A later `poll` that works marks that row `recovered: true`: it stays "failed" in the history, but the
+  row and the page no longer read "failed", and the same message failing again is a new row.
 - History states: starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start or a `handle` cut off by a
   reload: a "starting" row whose schedule isn't running in this JS thread), handled, skipped.

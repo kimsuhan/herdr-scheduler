@@ -311,6 +311,9 @@ async function round(bot, manual) {
       if (await raw.ended(thread.slice(prefix.length), api(bot.name))) await hc(["label", k.address, "scheduler.thread="]);
     }
     const found = items(await raw.poll(api(bot.name)));
+    // A poll that works again ends the failure the newest row reports (a round with nothing new adds no row).
+    const last = (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name);
+    if (last?.status === "failed" && last.item == null && !last.recovered) patch(last.id, { recovered: true });
     checked[bot.name] = { at: Date.now(), items: found.length, fresh: 0 };
     for (const item of found) {
       if (busy(bot.name)) break; // the rest wait, unseen, for a later round
@@ -326,7 +329,7 @@ async function round(bot, manual) {
     // A poll or ended failing every round is one row and one notification until the message changes.
     const note = String(e.message ?? e), last = (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name);
     checked[bot.name] = { at: Date.now(), error: note };
-    if (last?.status !== "failed" || last.note !== note) {
+    if (last?.status !== "failed" || last.note !== note || last.recovered) {
       record({ id: hex(8), bot: bot.name, at: Date.now(), trigger: "poll", status: "failed", note });
       notify({ title: L("{0} failed", bot.name), body: L(note), level: "error" });
     }

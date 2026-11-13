@@ -423,7 +423,7 @@ export default class Scheduler extends View {
   // What a bot is doing, as a word and a color.
   status(b, t) {
     if (b.error) return ["broken", t.ansi1];
-    const last = this.history(b.name)[0], s = last && state(last);
+    const last = this.history(b.name)[0], s = last && !last.recovered && state(last); // a failed poll a later round got past is over
     if (busy(b.name)?.status === "blocked") return ["blocked", t.blocked];
     if (running(b.name)) return ["running", t.working];
     if ((shared("scheduler.paused") ?? {})[b.name]) return ["paused", t.dim];
@@ -498,7 +498,7 @@ export default class Scheduler extends View {
   // state's word) over how its last runs went. Schedules and scripts read the same. Only a schedule in a state stands out, with a raised
   // background and a bar in the state's color: the idle ones stay plain.
   row(b, t) {
-    const [word, color] = this.status(b, t), last = this.history(b.name)[0], s = last && state(last);
+    const [word, color] = this.status(b, t), last = this.history(b.name)[0], s = last && !last.recovered && state(last);
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
     const meta = wrong ? L(wrong) : L(describe(b.schedule));
