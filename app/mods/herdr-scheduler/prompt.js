@@ -20,6 +20,7 @@ What a script is:
 - It default-exports { about, schedule, async poll(ctx), async handle(item, ctx), async ended(thread, ctx) }. ended is optional; about is one line saying what it does.
 - At each scheduled time, poll returns items [{ key, ...data }], and handle runs once for each key never seen before. Put into the key whatever should make an item count as new again.
 - It may use only ctx: exec, start, send, thread, notify, skip, state, spaces, panes, terminals, home. No imports, no setTimeout, no top-level await, nothing kept between rounds except through ctx.state.
+- ctx.exec(cmd, args, { cwd, timeout }) stops a program after 30 seconds unless timeout (ms, at most 600000) gives it more: give a slow download or build enough.
 - Values that are mine (repo paths, names, prompts) go in constants at the top of the file.
 - A script must not delete, push, post, merge or pay on its own. If what I ask needs one of those, ask me first and say so in its about line.
 

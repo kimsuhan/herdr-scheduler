@@ -292,7 +292,7 @@ Top to bottom:
   };
   ```
 - `ctx`, the only API a code schedule gets (it never imports `herdr`):
-  - `exec(cmd, args, { cwd, timeout })`: herdr's `exec`. `notify({ title, body, level })`. `spaces()`,
+  - `exec(cmd, args, { cwd, timeout })`: herdr's `exec` (stopped after `timeout` ms, 30000 unless given, at most 600000). `notify({ title, body, level })`. `spaces()`,
     `panes()`, `terminals()`: herdr's, as they are. `home`: the home folder.
   - `state.get(key)`, `state.set(key, value)`: the schedule's store in `scheduler.state`; `set` writes only
     when the value changes, and `undefined` removes the key.

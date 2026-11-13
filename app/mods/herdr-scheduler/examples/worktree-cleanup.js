@@ -20,7 +20,8 @@ export default {
   schedule: { every: "5m" },
 
   // What there is now. Called with ctx, never with Herdr itself:
-  //   ctx.exec(cmd, args, { cwd, timeout })  runs a program: { code, stdout, stderr }
+  //   ctx.exec(cmd, args, { cwd, timeout })  runs a program: { code, stdout, stderr }. It is stopped
+  //     after `timeout` ms, 30000 unless given (at most 600000): give more to a slow download.
   //   ctx.spaces(), ctx.panes(), ctx.terminals()  Herdr's live spaces, panes and terminals
   //   ctx.home  your home folder
   //   ctx.state.get(key), ctx.state.set(key, value)  this schedule's own store (undefined removes a key)
