@@ -112,8 +112,11 @@ export const remove = (name) => fs.unlink(`${JOBS()}/${name}.js`);
 // working or waiting on someone.
 export const busy = (name) => terminals().find((k) => k.state === "live" && going(k.status)
   && (k.labels?.["scheduler.bot"] === name || k.labels?.["scheduler.thread"]?.startsWith(`${name}:`)));
-// A run of this bot that hasn't got its prompt yet: its agent reports nothing so far.
-const starting = (name) => (shared("scheduler.history") ?? []).some((r) => r.bot === name && state(r) === "starting");
+// Bots with a run being started or a round going, in this JS thread (copies of the mod share it, a
+// reload empties it): one bot never has two at once, and a "starting" row of a bot not in here was cut off.
+const active = new Set();
+// Started and not through yet: "Run now" waits until it is.
+export const running = (name) => active.has(name) || Boolean(busy(name));
 
 // The bots to start now, as [bot, trigger]. The slot is written before anything is awaited, so of
 // several copies of the mod only one starts it.
@@ -128,7 +131,7 @@ export function tick(bots, now = Date.now()) {
     slots[b.name] = d.slot;
     if (d.first || paused[b.name]) continue;
     if (b.code) { todo.push([b, "schedule"]); continue; } // a round is safe to repeat: a late slot runs, none is missed
-    if (busy(b.name) || starting(b.name)) continue; // a run still going: this slot is skipped
+    if (running(b.name)) continue; // a run still going: this slot is skipped
     if (d.run) todo.push([b, d.late > GRACE ? "catch-up" : "schedule"]);
     else missed.push({ id: hex(8), bot: b.name, at: d.slot, trigger: "schedule", where: where(b.where), status: "missed" });
   }
@@ -271,19 +274,22 @@ async function launch(bot, { where: w, agent, prompt }, id, labels = []) {
 // Starts a bot: a prompt bot's run, or a code bot's round. Never throws: a failure is a history row
 // and a notification.
 export async function start(bot, trigger) {
-  if (bot.code) return round(bot);
-  const id = hex(8);
-  record({ id, bot: bot.name, at: Date.now(), trigger, where: where(bot.where), status: "starting" });
+  if (active.has(bot.name)) return;
+  active.add(bot.name);
   try {
-    await launch(bot.name, bot, id);
-  } catch (e) {
-    const note = String(e.message ?? e);
-    patch(id, { status: "failed", note });
-    notify({ title: L("{0} didn't start", bot.name), body: L(note), level: "error" });
-  }
+    if (bot.code) return await round(bot);
+    const id = hex(8);
+    record({ id, bot: bot.name, at: Date.now(), trigger, where: where(bot.where), status: "starting" });
+    try {
+      await launch(bot.name, bot, id);
+    } catch (e) {
+      const note = String(e.message ?? e);
+      patch(id, { status: "failed", note });
+      notify({ title: L("{0} didn't start", bot.name), body: L(note), level: "error" });
+    }
+  } finally { active.delete(bot.name); }
 }
 
-const rounds = new Set(); // code bots with a round going: two rounds of one bot never overlap
 // What each code bot's last round found, { at, items, fresh } or { at, error }: a round with nothing
 // new leaves no history row, so this is how the panel shows it ran. In memory: a reload forgets it.
 const checked = {};
@@ -292,8 +298,6 @@ export const lastRound = (name) => checked[name];
 // A code bot's round: `ended` for each live terminal holding one of its threads (true lets it go),
 // then `poll`, then `handle` for each item whose key is new, while the bot isn't busy.
 async function round(bot) {
-  if (rounds.has(bot.name)) return;
-  rounds.add(bot.name);
   try {
     const raw = bot.raw, prefix = `${bot.name}:`;
     if (raw.ended) for (const k of terminals()) {
@@ -304,7 +308,7 @@ async function round(bot) {
     const found = items(await raw.poll(api(bot.name)));
     checked[bot.name] = { at: Date.now(), items: found.length, fresh: 0 };
     for (const item of found) {
-      if (busy(bot.name) || starting(bot.name)) break; // the rest wait, unseen, for a later round
+      if (busy(bot.name)) break; // the rest wait, unseen, for a later round
       // The key is written before anything is awaited, so of several copies of the mod only one handles it.
       const seen = shared("scheduler.seen") ?? {};
       if (seen[bot.name]?.[item.key] != null) continue;
@@ -320,7 +324,7 @@ async function round(bot) {
       record({ id: hex(8), bot: bot.name, at: Date.now(), trigger: "poll", status: "failed", note });
       notify({ title: L("{0} failed", bot.name), body: L(note), level: "error" });
     }
-  } finally { rounds.delete(bot.name); }
+  }
 }
 
 // One item: its history row, then the bot's handle. A row that got no terminal and no skip reads
@@ -380,7 +384,8 @@ function api(bot, row) {
 
 // A history row's state now: what was recorded, or what its terminal is doing.
 export function state(row) {
-  if (row.status === "starting") return Date.now() - row.at > 300_000 ? "interrupted" : "starting";
+  // A code item's row is "starting" while its handle runs, which is the script's work: "running".
+  if (row.status === "starting") return !active.has(row.bot) ? "interrupted" : row.trigger === "poll" ? "running" : "starting";
   if (row.status !== "sent") return row.status; // failed, missed, handled, skipped, done (ended by tidy)
   const k = terminals().find((k) => k.address === row.terminal && k.labels?.["scheduler.run"] === row.id);
   if (!k || k.state !== "live") return "ended";

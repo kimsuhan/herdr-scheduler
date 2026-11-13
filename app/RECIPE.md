@@ -65,7 +65,9 @@ Top to bottom:
      is done or handled, `ansi1` when it failed, was missed or interrupted, the state's color while it
      is going, else `dim`) and a 3px `border` dot for each slot with no run yet. A code
      schedule's row reads the same; what its last round found is on its page;
-  3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover).
+  3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover). While the schedule
+     is running (see "▶" and "Run now" below) it is a braille spinner (`.frames`, 90ms, 13px `working`)
+     that can't be pressed.
   A schedule in a state (running, blocked, paused, gone wrong) has a `raised` background and its left
   border in the state's color; the others are plain, with the border in `background`. A broken file
   has only the name and the reason.
@@ -98,7 +100,8 @@ Top to bottom:
      (12px `muted`); "Next" over the timer to the next run,
      22px in the terminal font, or "Status" over the state's word in its color, 20px medium, while it
      is running, blocked, paused or gone wrong; under it the schedule in 11.5px `muted`, "daily 09:00,
-     catches up within 120m"; a full-width 32px `solid` "Run now"; and "Changed in
+     catches up within 120m"; a full-width 32px `solid` "Run now" (while the schedule is running: at 0.6
+     opacity, the same spinner and "Running", not pressable); and "Changed in
      the panel: the file has other values." (11px `dim`) for a changed script.
   2. "Prompt": the prompt in a `background` box (12px `muted`), then Agent and Where lines (64px `dim`
      label, value truncated). For a code schedule "Runs" instead: Runs, "code: poll, handle" (", ended"
@@ -146,8 +149,8 @@ Top to bottom:
 - Every 5 seconds each schedule's current slot (the latest scheduled time that has passed) is compared with
   the last slot seen. A new slot runs if it is at most 90 seconds old, or at most `catchUp` old when the
   schedule sets one (trigger "catch-up"); older than that it becomes a "missed" row. A schedule seen for the first
-  time doesn't run until its next slot. A slot is skipped without a row while the schedule is paused or its
-  previous run is still starting, working or blocked.
+  time doesn't run until its next slot. A slot is skipped without a row while the schedule is paused or it is
+  running.
 - A run starts the agent with `hc run --bg --no-parent`, waits until it reports idle, then sends the
   prompt with `hc send`. Nothing takes the window's focus.
   - `background`: no pane anywhere.
@@ -168,21 +171,24 @@ Top to bottom:
   2. `poll` returns items. Nothing counts as none; anything but an array, or an item without a `key`, is
      a failure. Keys are made strings.
   3. Each item in order: the round stops if the schedule is busy (a live terminal labelled with the schedule or one
-     of its threads is working or blocked) or a row of it is starting; an item whose key is in
+     of its threads is working or blocked); an item whose key is in
      `scheduler.seen` is passed over; otherwise its key is written there (before anything is awaited)
      and `handle` runs. The round also stops after an item whose `handle` gave an agent work
      (`ctx.start` or `ctx.send`), since the agent may not report working yet. Items it didn't reach come
      back in a later round.
-- Each handled item is a row (trigger "poll", the key in `item`), "starting" while `handle` runs. When it
+- Each handled item is a row (trigger "poll", the key in `item`), "running" while `handle` runs. When it
   returns the row follows the terminal `ctx.start` or `ctx.send` gave it, like a prompt run's, or reads
   "handled"; `ctx.skip` makes it "skipped" with the reason; a throw makes it "failed" with the message and
   an error notification "<schedule> failed on <key>".
 - A `poll` or `ended` that throws ends the round. It is a "failed" row (trigger "poll") and an error
   notification "<schedule> failed", unless the schedule's newest row is already "failed" with the same message.
 - History states: starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
-  gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start cut off by a reload,
-  or a `handle` running over 5 minutes), handled, skipped.
-- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. Turning the switch off stops
+  gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start or a `handle` cut off by a
+  reload: a "starting" row whose schedule isn't running in this JS thread), handled, skipped.
+- "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round. A schedule is
+  running from that press (or its slot) until its run has got its prompt or its round is through (kept in
+  memory, so a reload ends it), and also while it is busy; meanwhile the row reads "running" and neither
+  starts it again. Turning the switch off stops
   scheduled runs and rounds of that schedule.
 - The form checks what is typed as it is typed. Pressing Save with something wrong shows the first
   problem and saves nothing; from then on the line follows what is typed. Save writes `jobs/<name>.js` as `export default { … };` (JSON), which reloads the mod
@@ -215,7 +221,8 @@ Top to bottom:
   09:00", "5분마다"), validation and start failures, and notifications. Names, prompts, `about` lines,
   item keys and a program's own error output stay as they are. History notes are stored in English and
   translated when shown.
-- Clicking a history row: a background run still alive opens in a peek (`terminal.peek`); a run in a
+- Clicking a history row with a terminal (one still starting too, so a dialog the agent stopped at can be
+  seen): a background run still alive opens in a peek (`terminal.peek`); a run in a
   tab is gone to (`pane.focus`); an ended run's last 200 lines are read back and shown under the row in
   the terminal font (click again to fold).
 - A background agent is ended as soon as its turn is over, on the next tick: it has no tab, so left

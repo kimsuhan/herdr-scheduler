@@ -5,12 +5,13 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { hc, run, theme, settings, shared, setShared, spaces, terminals, pickFolder, props, appHome, home, knownAgents } from "herdr";
-import { load, tick, start, state, busy, setPaused, check, save, remove, lastRound, current, setOverride, tidy } from "./engine.js";
+import { load, tick, start, state, busy, running, setPaused, check, save, remove, lastRound, current, setOverride, tidy } from "./engine.js";
 import { describe, next, parse } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
 import { scriptPrompt, editPrompt } from "./prompt.js";
 
 const TICK = 5_000;
+const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SETTLE = 30_000; // no runs this soon after a load: a run of saves reloads the mod each time
 const REPEATS = [["daily", "Daily"], ["weekdays", "Weekdays"], ["days", "Days"], ["every", "Every"]];
 const PLACES = [["background", "Background"], ["space", "Space"], ["worktree", "Worktree"]];
@@ -84,8 +85,7 @@ export default class Scheduler extends View {
   // A run's terminal if it is still there: a background one is peeked at, a pane is gone to.
   // An ended one's last screen is read back into the panel.
   show(row, cx) {
-    const s = state(row);
-    if (!row.terminal || s === "starting") return;
+    if (!row.terminal) return;
     // Still there (a background agent is ended once its turn is over; its row stays "done").
     if (terminals().some((k) => k.address === row.terminal && k.state === "live" && k.labels?.["scheduler.run"] === row.id))
       return run(row.where === "background" ? "terminal.peek" : "pane.focus", { terminal: row.terminal });
@@ -423,8 +423,9 @@ export default class Scheduler extends View {
   // What a bot is doing, as a word and a color.
   status(b, t) {
     if (b.error) return ["broken", t.ansi1];
-    const live = busy(b.name), last = this.history(b.name)[0], s = last && state(last);
-    if (live) return live.status === "blocked" ? ["blocked", t.blocked] : ["running", t.working];
+    const last = this.history(b.name)[0], s = last && state(last);
+    if (busy(b.name)?.status === "blocked") return ["blocked", t.blocked];
+    if (running(b.name)) return ["running", t.working];
     if ((shared("scheduler.paused") ?? {})[b.name]) return ["paused", t.dim];
     if (s === "failed" || s === "missed" || s === "interrupted") return [s, t.ansi1];
     return [null, t.idle];
@@ -514,9 +515,12 @@ export default class Scheduler extends View {
             : div().font_family(mono).text_size(12).text_color(at - Date.now() < 3_600_000 ? t.foreground : t.muted).child(timer(at)))
           // How its last eight runs went (all dots before its first run).
           .child(this.strip(this.history(b.name), 8, t)))
+        // While it runs, a spinner that can't be pressed again.
         .child(div().id(`run-${b.name}`).size(24).flex_none().flex().items_center().justify_center().rounded(6).text_size(10)
-          .text_color(t.dim).hover((st) => st.bg(t.raised).text_color(t.foreground))
-          .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => this.go(b, "manual", cx)).child("▶")));
+          .text_color(t.dim).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .when(running(b.name), (el) => el.text_size(13).text_color(t.working).frames(SPIN, 90))
+          .when(!running(b.name), (el) => el.cursor_pointer().hover((st) => st.bg(t.raised).text_color(t.foreground))
+            .on_click((_e, cx) => this.go(b, "manual", cx)).child("▶"))));
   }
 
   // A schedule's page, as cards: when it runs next (or what it is doing) with the actions, what it
@@ -566,9 +570,11 @@ export default class Scheduler extends View {
             : div().font_family(mono).text_size(22).child(timer(next(b.schedule, Date.now()))))
           .child(div().text_size(11.5).text_color(t.muted)
             .child(b.catchUp ? L("{0}, catches up within {1}m", L(describe(b.schedule)), b.catchUp / 60_000) : L(describe(b.schedule)))))
-        .child(h_flex().id("d-run").h(32).items_center().justify_center().rounded(8).text_size(12.5).font_medium().cursor_pointer()
-          .bg(t.solid).text_color(t.solid_foreground).hover((st) => st.opacity(0.88))
-          .on_click((_e, cx) => this.go(b, "manual", cx)).child(L("Run now")))
+        .child(h_flex().id("d-run").h(32).gap(6).items_center().justify_center().rounded(8).text_size(12.5).font_medium()
+          .bg(t.solid).text_color(t.solid_foreground)
+          .when(running(b.name), (el) => el.opacity(0.6).child(div().frames(SPIN, 90)).child(L("Running")))
+          .when(!running(b.name), (el) => el.cursor_pointer().hover((st) => st.opacity(0.88))
+            .on_click((_e, cx) => this.go(b, "manual", cx)).child(L("Run now"))))
         .when(Boolean(b.changed), (el) => el.child(div().text_size(11).text_color(t.dim).child(L("Changed in the panel: the file has other values.")))))
       // What it runs.
       .child(b.code

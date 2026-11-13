@@ -119,7 +119,6 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - A code schedule remembers 500 keys; a poll that keeps returning more than 500 distinct live keys hands the
   oldest out again. Nothing forgets a key on purpose, and removing a schedule leaves its `seen` and `state`.
 - `ctx.start` and `ctx.send` work in `handle` only. "Run now" runs a whole round, not one item.
-- A `handle` running over 5 minutes reads "interrupted" until it returns.
 - The form can't make a code schedule or edit its code: for one it changes only the schedule and the about
   line, as an override in shared `scheduler.overrides` (read through `current()` in `engine.js`), so the
   file and what runs can differ.
