@@ -4,8 +4,8 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
-import { hc, run, theme, settings, shared, setShared, spaces, terminals, pickFolder, props, appHome, home, knownAgents } from "herdr";
-import { load, tick, start, state, busy, running, setPaused, check, save, remove, roundsOf, historyDays, historyDay, current, setOverride, tidy } from "./engine.js";
+import { hc, run, theme, settings, checking, shared, setShared, spaces, terminals, pickFolder, props, appHome, home, knownAgents } from "herdr";
+import { load, tick, start, state, busy, running, setPaused, check, save, remove, roundsOf, historyDays, historyDay, current, setOverride, tidy, checkoutPath } from "./engine.js";
 import { describe, next, parse, keepDays, fold } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
 import { scriptPrompt, editPrompt } from "./prompt.js";
@@ -48,7 +48,7 @@ export default class Scheduler extends View {
     cx.spawn(async (cx) => { this.loaded = await load(); cx.notify(); });
     const loadedAt = Date.now();
     cx.timer.every(TICK, (cx) => {
-      if (!this.bots || Date.now() - loadedAt < SETTLE) return;
+      if (checking() || !this.bots || Date.now() - loadedAt < SETTLE) return; // `herdr-app check` must start nothing
       for (const [bot, trigger] of tick(this.bots)) this.go(bot, trigger, cx);
       if (this.tidying) return; // the last tidy's hc calls can outlast a tick
       this.tidying = true;
@@ -401,7 +401,7 @@ export default class Scheduler extends View {
               : "The branch is made once from the repository's current code, then left as the agent leaves it: its commits stay for the next run."))
             .child(field(f.rev === "commit" ? "Branch or commit to check out" : "Branch name", input("f-ref", f.ref)))
             .when(Boolean(f.repo.value().trim()), (x) => x.child(div().truncate().font_family(settings().font_family ?? "JetBrains Mono").text_size(10.5).text_color(t.dim)
-              .child(`~/.herdr/worktrees/${f.repo.value().trim().split("/").filter(Boolean).pop()}/${f.folder ?? f.original ?? f.name.value().trim()}`)))))))
+              .child(checkoutPath(f.repo.value().trim(), f.folder ?? f.original ?? f.name.value().trim()))))))))
       // A script's code isn't the form's to change: an agent does it, after asking what to change.
       .when(f.code, (el) => el.child(this.askCard(t, f.ask, "f-ask",
         editPrompt(`${appHome()}/mods/herdr-scheduler`.replace(home(), "~"), f.original, shared("scheduler.lang") === "ko" ? "Korean" : "English"),

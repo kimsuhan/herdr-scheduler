@@ -20,7 +20,7 @@ export default {
   //   { background: true, cwd: "~/code/my-repo" }      no tab: read it from the panel's history
   //   { space: "my-repo" }                             a new tab in that space (its name or id)
   //   { worktree: { repo: "~/code/my-repo", commit: "origin/main" } }
-  //       a space on ~/.herdr/worktrees/my-repo/<schedule name>, fetched and checked out on every run.
+  //       a space on <worktrees.directory, default ~/.herdr/worktrees>/my-repo/<schedule name>, fetched and checked out on every run.
   //       `branch: "nightly"` instead of commit keeps a branch; `name` picks another folder name.
   where: { background: true, cwd: "~/code/my-repo" },
 

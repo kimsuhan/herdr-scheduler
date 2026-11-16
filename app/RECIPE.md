@@ -18,7 +18,7 @@ back and end it, and `git` (`fetch`, `worktree add`, `checkout --detach`, `rev-p
 Each schedule starts **the command its file names** with **the prompt its file holds**. A code schedule **runs
 its own JavaScript** inside Herdr on every round, with **whatever programs it calls** through `ctx.exec`
 (the example calls `gh`), and can start agents and type into terminals that hold its threads. Read a schedule
-before putting it in `jobs/`. The mod reads the folder `~/.herdr/worktrees/<repo>/<name>` to see if a
+before putting it in `jobs/`. The mod reads the folder `<worktrees.directory>/<repo>/<name>` (default `~/.herdr/worktrees`) to see if a
 checkout exists. It reaches no network itself (`git fetch`, the agents and a code schedule's programs do).
 The only files it writes or deletes are the schedules in its own `jobs/` folder, when you save or delete one
 in the form, and its history, one file per schedule and day under `~/.config/herdr-app/data/herdr-scheduler/history/`
@@ -139,7 +139,7 @@ Top to bottom:
      "Code to start from" over two pills, "Latest every run" (the file's `commit`) and "Keep a branch"
      (`branch`), with a sentence on what the picked one does; "Branch or commit to check out" or
      "Branch name" over an input; and the checkout's path in 10.5px `dim` terminal font,
-     "~/.herdr/worktrees/<repo>/<name>".
+     "<worktrees.directory>/<repo>/<name>" (`settings().worktrees?.directory`, default "~/.herdr/worktrees").
   Under the cards a red line saying what is wrong, only once Save was pressed with something wrong; then
   Cancel and a `solid` Save at the right ("Reset to the file" at the left for a changed script). A
   script's form has card 1 with About only, card 2 without the catch-up field, and in place of card 3
@@ -163,7 +163,8 @@ Top to bottom:
   prompt with `hc send`. Nothing takes the window's focus.
   - `background`: no pane anywhere.
   - `space`: a new tab in that space, started in the folder of the space's first pane.
-  - `worktree`: a space on `~/.herdr/worktrees/<repo folder name>/<name or schedule name>`, made if absent.
+  - `worktree`: a space on `<worktrees.directory>/<repo folder name>/<name or schedule name>`, made if absent
+    (Herdr's settings.json, default `~/.herdr/worktrees`).
     With `commit` the repo is fetched and the checkout detached at it on every run; with `branch` (default:
     the name) the branch is created from the repo's HEAD if new and left alone afterwards. If a space
     already shows that folder, the run is a new tab in it.

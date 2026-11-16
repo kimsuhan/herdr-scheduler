@@ -93,7 +93,8 @@ export default {
 | `agent` | 실행할 명령, 배열로 |
 | `prompt` | 에이전트가 준비되면 보내는 말 |
 
-워크트리는 Herdr 기본 worktree mod와 같은 `~/.herdr/worktrees/<repo>/<스케줄 이름>`에 만듭니다.
+워크트리는 Herdr의 New worktree와 같은 `<폴더>/<repo>/<스케줄 이름>`에 만듭니다. 폴더는 Herdr settings.json의
+`worktrees.directory`이고, 기본값은 `~/.herdr/worktrees`입니다.
 
 스케줄은 정한 시각보다 최대 5초 늦게 실행됩니다. 패널이 5초마다 확인하기 때문입니다. 스케줄을 저장하면 mod가
 다시 로드되고, 다시 로드된 뒤 30초 동안은 아무것도 실행하지 않습니다.

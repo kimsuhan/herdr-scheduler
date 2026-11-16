@@ -96,7 +96,8 @@ export default {
 | `agent` | the command to start, as an array |
 | `prompt` | sent once the agent is ready |
 
-Worktrees go to `~/.herdr/worktrees/<repo>/<schedule name>`, where Herdr's own worktree mod puts them.
+Worktrees go to `<folder>/<repo>/<schedule name>`, where Herdr's New worktree puts them: the folder is
+`worktrees.directory` in Herdr's settings.json, `~/.herdr/worktrees` by default.
 
 A schedule runs up to 5 seconds after its time: the panel checks every 5 seconds. Saving a schedule
 reloads the mod, and nothing runs for 30 seconds after a reload.

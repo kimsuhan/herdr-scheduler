@@ -5,7 +5,7 @@
 // write inside it reloads the mod).
 
 import * as fs from "fs/promises";
-import { hc, exec, appHome, home, shared, setShared, terminals, spaces, panes, notify, readTextFile, writeTextFile } from "herdr";
+import { hc, exec, appHome, home, settings, shared, setShared, terminals, spaces, panes, notify, readTextFile, writeTextFile } from "herdr";
 import { parse, due, next, duration, items, remember, dayFile, keepDays, expired, rows } from "./schedule.js";
 import { say } from "./i18n.js";
 
@@ -287,12 +287,15 @@ async function git(args, cwd) {
   if (r.code !== 0) throw new Error(`git ${args[0]}: ${r.stderr.trim() || r.stdout.trim()}`);
 }
 
-// The checkout for a worktree bot, made if it isn't there: ~/.herdr/worktrees/<repo>/<name>, where
-// Herdr's own worktree mod puts them. `commit` (any rev: "origin/main") is fetched and checked out
+// Where Herdr's New worktree puts checkouts: <worktrees.directory>/<repo folder>/<name>.
+export const checkoutPath = (repo, name) =>
+  `${(settings().worktrees?.directory ?? "~/.herdr/worktrees").replace(/\/$/, "")}/${repo.split("/").filter(Boolean).pop()}/${name}`;
+
+// The checkout for a worktree bot, made if it isn't there, at checkoutPath. `commit` (any rev: "origin/main") is fetched and checked out
 // detached on every run; `branch` is created from the repo's HEAD if new and then left alone.
 async function checkout(w, bot) {
   const repo = expand(w.repo), name = (w.name ?? bot).replace(/\//g, "-");
-  const path = `${home()}/.herdr/worktrees/${repo.split("/").filter(Boolean).pop()}/${name}`;
+  const path = expand(checkoutPath(repo, name));
   const exists = await fs.readdir(path).then(() => true, () => false);
   if (w.commit) {
     await git(["fetch", "--quiet"], repo);
