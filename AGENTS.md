@@ -86,6 +86,16 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
   imperative (`feat`, `fix`, `docs`, `test`, `refactor`, `chore`), under 72 characters, with a body only
   when the why isn't obvious. PR titles and bodies are in English too.
 
+## Versions
+
+- The mod has no version field: a push to `main` already ships it, and a tag only marks what changed.
+  Tag `vX.Y.Z` on `main` when a pushed change to `app/mods/` is one the person notices (a `feat` bumps
+  the minor, a `fix` the patch), and run `gh release create vX.Y.Z --notes-file -`. Docs, tests and
+  chores ship untagged.
+- Notes are in English: one line on what changed for the user, bullets for the behavior and any catch,
+  how to update (copy `app/mods/herdr-scheduler` over the installed folder; `jobs/` stays), then the
+  `**Full Changelog**:` compare link from the previous tag.
+
 ## Sharing the mod
 
 - herdr.dev/mods lists a public GitHub repo with the topic `herdr-mod` within the hour of a push, so
