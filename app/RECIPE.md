@@ -19,7 +19,8 @@ Each schedule starts **the command its file names** with **the prompt its file h
 its own JavaScript** inside Herdr on every round, with **whatever programs it calls** through `ctx.exec`
 (the example calls `gh`), and can start agents and type into terminals that hold its threads. Read a schedule
 before putting it in `jobs/`. The mod reads the folder `<worktrees.directory>/<repo>/<name>` (default `~/.herdr/worktrees`) to see if a
-checkout exists. It reaches no network itself (`git fetch`, the agents and a code schedule's programs do).
+checkout exists. Its own network use is one GET a day at most to `api.github.com` for this repo's latest
+release (no token, nothing about you); `git fetch`, the agents and a code schedule's programs reach the rest.
 The only files it writes or deletes are the schedules in its own `jobs/` folder, when you save or delete one
 in the form, and its history, one file per schedule and day under `~/.config/herdr-app/data/herdr-scheduler/history/`
 (item keys and programs' error output are in it; removing the mod leaves it there). Its other state is in
@@ -40,7 +41,9 @@ A card filling its block: `rounded(10)`, 1px `border`, `background`, 13px text i
 Top to bottom:
 
 - **Header**, 42px, 14px side padding, 1px `border` below: "Scheduler" semibold on the left, and on the
-  right "N schedules" (11px, `dim`). In a schedule's detail, the form or the settings it shows a 24px
+  right "N schedules" (11px, `dim`), then, only when a newer release is out, an "Update to v<x.y.z>" pill
+  (22px, 8px side padding, `rounded(6)`, 11.5px, `selected` with an `accent` border, `hover`) that opens
+  the Update page. In a schedule's detail, the form or the settings it shows a 24px
   "‹" button and the schedule's name, "New schedule" or "Edit <name>".
 - **Timeline**, at the top of the list: 14px side padding, 1px `border` below. A title row, "Timeline"
   (10.5px semibold `dim`) and at the right the next run on the line in `foreground`, "15:00
@@ -93,6 +96,10 @@ Top to bottom:
     font, the example file's path and "→ …/jobs/<name>.js".
 - **Settings** (after clicking "Settings"): the header's "‹" and "Settings"; a "Language" label (11px
   semibold `dim`) over two pills, "English" and "한글".
+- **Update** (after clicking the pill): the header's "‹" and "Update"; 14px padding, 12px gaps:
+  "herdr-scheduler v<x.y.z> is out. You have v<VERSION>." (13px), then the Add script page's agent card,
+  titled "Have an agent update it", note "The agent reads the release, copies it over this mod and leaves
+  your schedules in jobs/ alone.", starting a tab named "Update scheduler" with `updatePrompt`.
 - **Detail** (after clicking a row), 14px padding, 10px gaps: three `raised` cards (`rounded(10)`, 12px
   padding), each with an 11px semibold `dim` caption.
   1. A top row: a pill switch (34px by 20px, `accent` with the 16px `background` knob at the right
@@ -296,7 +303,17 @@ Top to bottom:
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.
 - `prompt.js`, pure: `scriptPrompt(dir, language)`, the text the Add script page shows, copies and sends,
-  and `editPrompt(dir, name, language)`, the one a script's form does.
+  `editPrompt(dir, name, language)`, the one a script's form does, and `updatePrompt(home, tag, installed,
+  language)`, the Update page's: read Herdr's `AGENTS.md`, read the release's `app/mods/herdr-scheduler/`
+  at the tag, copy it over the mod without deleting, moving or overwriting anything in `jobs/`, run
+  `herdr-app check` and `herdr-app status`, and sum up the notes of each release since the installed one.
+- `update.js`, pure (`shared` and `setShared` are handed in): `VERSION`, the release this copy is;
+  `newer(a, b)` on `v1.2.3` or `1.2.3`; `available(state)`, the tag to offer or null;
+  `checkUpdate(shared, setShared, now)`: `GET https://api.github.com/repos/kimsuhan/herdr-scheduler/releases/latest`
+  only when shared `scheduler.update` (`{ checked, latest }`) is a day old. `checked` is written before the
+  request so copies starting together ask once; a failure sets it a day less an hour back (retried in an
+  hour); a `tag_name` is kept only if it matches `^v?\d+\.\d+\.\d+$`, since it goes into a prompt.
+  `main.js` calls it from `init` (not under `checking()`) and every hour. `update.test.js` covers it.
 - `main.js`: the `View`, `cx.timer.every(30000)` for the engine and `cx.timer.every(1000)` to redraw the
   timers (not in the headless copy), the list, detail and form (`InputState`, `Input`,
   `TextareaState`, `Textarea` from `gpui-base`).
@@ -386,7 +403,7 @@ Top to bottom:
 
 ## Done when
 
-- `node --test mods/herdr-scheduler/schedule.test.js mods/herdr-scheduler/i18n.test.js` passes and `herdr-app check mods/herdr-scheduler` passes.
+- `node --test mods/herdr-scheduler/schedule.test.js mods/herdr-scheduler/i18n.test.js mods/herdr-scheduler/update.test.js` passes and `herdr-app check mods/herdr-scheduler` passes.
 - With `jobs/` empty the panel says "No schedules yet."; copying `examples/daily-prompt.js` in lists it with
   its schedule and a timer counting down within a second.
 - A file with `daily: "25:00"` shows `"25:00" is not a time (09:30)` in red and the other schedules keep working.

@@ -48,3 +48,17 @@ When the file is changed:
 - Run "herdr-app check ${dir}" and "herdr-app status"; the errors list must be empty.
 - Show me what changed, and tell me exactly what the next round will do differently. Saving the file reloads the panel by itself; I can press the play button on the script's row to run a round now.
 `;
+
+// For the update page: `home` is Herdr's home, `tag` a release checked to be a plain version (update.js),
+// `installed` this copy's version. The agent copies the release over the mod and leaves jobs/ alone.
+export const updatePrompt = (home, tag, installed, language) => {
+  const dir = `${home}/mods/herdr-scheduler`;
+  return `Update herdr-scheduler, the Herdr app mod in ${dir}, from v${installed} to ${tag}. Talk to me in ${language}.
+
+1. Read ${home}/AGENTS.md first.
+2. Get app/mods/herdr-scheduler/ of https://github.com/kimsuhan/herdr-scheduler at tag ${tag}. Read every file before putting anything in, and tell me if the release does something the installed copy doesn't (runs other programs, reaches the network, reads or writes files outside its folder).
+3. Copy those files over ${dir}. Never delete, move or overwrite anything in ${dir}/jobs/: those are my schedules and scripts. Leave files the release doesn't have as they are.
+4. Run "herdr-app check ${dir}" and "herdr-app status"; the errors list must be empty.
+5. Tell me in a few lines what changed since v${installed}, from the notes of each release after it: https://github.com/kimsuhan/herdr-scheduler/releases
+`;
+};

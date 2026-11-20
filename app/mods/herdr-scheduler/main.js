@@ -8,7 +8,8 @@ import { hc, run, theme, settings, checking, shared, setShared, spaces, terminal
 import { load, tick, start, state, busy, running, setPaused, check, save, remove, roundsOf, historyDays, historyDay, current, setOverride, tidy, checkoutPath } from "./engine.js";
 import { describe, next, parse, keepDays, fold } from "./schedule.js";
 import { say, LANGUAGES } from "./i18n.js";
-import { scriptPrompt, editPrompt } from "./prompt.js";
+import { scriptPrompt, editPrompt, updatePrompt } from "./prompt.js";
+import { VERSION, available, checkUpdate } from "./update.js";
 
 const TICK = 5_000;
 const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -45,7 +46,14 @@ export default class Scheduler extends View {
     this.settings = false; // the settings page is shown
     this.past = null; // the All history page, while shown: { name, days (newest first, null while read), i, rows }
     this.guide = null; // the Add script page, while shown: { agents (installed, null while asked), agent, copied, shown (the prompt) }
+    this.update = null; // the Update page, while shown: the same as `guide`
     cx.spawn(async (cx) => { this.loaded = await load(); cx.notify(); });
+    // A newer release (update.js): asked at most once a day, by whichever copy gets there first. Its
+    // setShared redraws every copy.
+    if (!checking()) {
+      cx.spawn(() => checkUpdate(shared, setShared));
+      cx.timer.every(3_600_000, (cx) => cx.spawn(() => checkUpdate(shared, setShared)));
+    }
     const loadedAt = Date.now();
     cx.timer.every(TICK, (cx) => {
       if (checking() || !this.bots || Date.now() - loadedAt < SETTLE) return; // `herdr-app check` must start nothing
@@ -197,6 +205,7 @@ export default class Scheduler extends View {
     // first time it shows): put it in a floating block, which draws nothing when empty.
     if (props()?.headless) return div();
     const t = theme();
+    if (this.update) return this.card(t, L("Update"), this.renderUpdate(t), (cx) => { this.update = null; cx.notify(); });
     if (this.guide) return this.card(t, L("Add script"), this.renderGuide(t), (cx) => { this.guide = null; cx.notify(); });
     if (this.settings) return this.card(t, L("Settings"), this.renderSettings(t), (cx) => { this.settings = false; cx.notify(); });
     if (this.form) return this.card(t, this.form.original ? L("Edit {0}", this.form.original) : L("New schedule"), this.renderForm(t), (cx) => { this.form = null; cx.notify(); });
@@ -287,6 +296,16 @@ export default class Scheduler extends View {
           .child(div().truncate().child(`→ ${dir}/jobs/<name>.js`))));
   }
 
+  // The Update page: an agent copies the new release over this mod (prompt.js, `updatePrompt`).
+  renderUpdate(t) {
+    const tag = available(shared("scheduler.update")) ?? "";
+    const text = updatePrompt(appHome().replace(home(), "~"), tag, VERSION, shared("scheduler.lang") === "ko" ? "Korean" : "English");
+    return v_flex().p(14).gap(12)
+      .child(div().text_size(13).child(L("herdr-scheduler {0} is out. You have v{1}.", tag, VERSION)))
+      .child(this.askCard(t, this.update, "update", text, { title: "Have an agent update it", tab: L("Update scheduler"), done: () => { this.update = null; },
+        note: "The agent reads the release, copies it over this mod and leaves your schedules in jobs/ alone." }));
+  }
+
   renderSettings(t) {
     const lang = shared("scheduler.lang") ?? "en";
     return v_flex().p(14).gap(6)
@@ -297,13 +316,17 @@ export default class Scheduler extends View {
   // The panel: a header with a title (a back button when `back`), a scrolling body, and on the list
   // (no `back`) a footer with Settings, Add schedule and Add script, drawn like the rows at the foot of Herdr's sidebar.
   card(t, title, body, back) {
+    const tag = !back && available(shared("scheduler.update"));
     return v_flex().id("scheduler").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background)
       .border_1().border_color(t.border).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(back), (el) => el.child(this.button("back", "‹", t, back)))
         .child(div().flex_1().min_w(0).truncate().font_semibold().child(title))
         .when(!back && Boolean(this.bots), (el) => el
-          .child(div().text_size(11).text_color(t.dim).child(L(this.bots.length === 1 ? "{0} schedule" : "{0} schedules", this.bots.length)))))
+          .child(div().text_size(11).text_color(t.dim).child(L(this.bots.length === 1 ? "{0} schedule" : "{0} schedules", this.bots.length))))
+        .when(Boolean(tag), (el) => el.child(h_flex().id("scheduler-update").h(22).px(8).flex_none().items_center().rounded(6).text_size(11.5)
+          .cursor_pointer().bg(t.selected).border_1().border_color(t.accent).hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => { this.update = this.asking(cx); cx.notify(); }).child(L("Update to {0}", tag)))))
       .child(div().id("scheduler-body").flex_1().min_h(0).overflow_y_scrollbar().child(body))
       .when(!back, (el) => {
         const row = (id, icon, label, color, onClick) => h_flex().id(id).h(28).px(8).gap(9).items_center().rounded(8)

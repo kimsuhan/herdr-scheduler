@@ -19,8 +19,10 @@ Built: prompt schedules, code schedules, the panel with its form, and the headle
   - `schedule.test.js`: `node --test` cases for `schedule.js`.
   - `i18n.js` and `i18n.test.js`: the panel's languages (English and Korean), and the test that every
     string the code shows has a text in each.
-  - `prompt.js`: the prompts the Add script page and a script's form give an agent. They describe the
-    script format, so they change whenever the format or `ctx` does.
+  - `update.js` and `update.test.js`: `VERSION`, and the daily check for a newer release (pure: `shared`
+    and `setShared` are handed in). The Update page's prompt is `updatePrompt` in `prompt.js`.
+  - `prompt.js`: the prompts the Add script page, a script's form and the Update page give an agent. The script
+    ones describe the script format, so they change whenever the format or `ctx` does.
   - `settings.svg`, `plus.svg`, `script.svg`, `pencil.svg`, `trash.svg`: the icons.
   - `examples/`: example schedules. They ship inside the mod because whoever adds a mod copies only
     `mods/<name>/`.
@@ -63,7 +65,7 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 
 ## After a change
 
-- `node --test app/mods/herdr-scheduler/schedule.test.js app/mods/herdr-scheduler/i18n.test.js` after any
+- `node --test app/mods/herdr-scheduler/schedule.test.js app/mods/herdr-scheduler/i18n.test.js app/mods/herdr-scheduler/update.test.js` after any
   change to the mod's code. Add a case for new behavior.
 - Text the person sees goes through `L("English text", ...args)` and gets its Korean in `i18n.js` in the
   same change. English is the key, so never build a shown sentence by concatenation: use `{0}`.
@@ -88,10 +90,12 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 
 ## Versions
 
-- The mod has no version field: a push to `main` already ships it, and a tag only marks what changed.
+- A push to `main` already ships the mod; a tag marks what changed and is what installed panels offer.
   Tag `vX.Y.Z` on `main` when a pushed change to `app/mods/` is one the person notices (a `feat` bumps
   the minor, a `fix` the patch), and run `gh release create vX.Y.Z --notes-file -`. Docs, tests and
   chores ship untagged.
+- `VERSION` in `update.js` is the version the commit will be tagged as: bump it in the commit that gets
+  the tag. A tag above it makes every installed copy, this one included, offer an update to itself.
 - Notes are in English: one line on what changed for the user, bullets for the behavior and any catch,
   how to update (copy `app/mods/herdr-scheduler` over the installed folder; `jobs/` stays), then the
   `**Full Changelog**:` compare link from the previous tag.

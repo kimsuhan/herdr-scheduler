@@ -14,6 +14,10 @@ const KO = {
   "The prompt explains how scripts work and makes the agent ask you what to build.": "프롬프트가 스크립트의 동작 방식을 알려 주고, 무엇을 만들지는 에이전트가 되묻게 합니다.",
   "Start in a new tab": "새 탭에서 시작", "Copy prompt": "프롬프트 복사", "Copied": "복사됨", "Show prompt": "프롬프트 보기", "Hide prompt": "프롬프트 숨기기",
   "Change its code": "코드 수정하기",
+  "Update": "업데이트", "Update to {0}": "{0} 업데이트", "Update scheduler": "스케줄러 업데이트", "Have an agent update it": "에이전트에게 업데이트 맡기기",
+  "herdr-scheduler {0} is out. You have v{1}.": "herdr-scheduler {0}이 나왔습니다. 지금 버전은 v{1}입니다.",
+  "The agent reads the release, copies it over this mod and leaves your schedules in jobs/ alone.":
+    "에이전트가 새 릴리스를 읽고 이 mod에 덮어씁니다. jobs/의 스케줄은 건드리지 않습니다.",
   "The prompt points the agent at this script's file and makes it ask you what to change.": "프롬프트가 이 스크립트의 파일을 알려 주고, 무엇을 바꿀지는 에이전트가 되묻게 합니다.",
   "Write it by hand": "직접 만들기",
   "Copy the example into the jobs folder and edit it. Its comments explain the format, and saving the file adds it here.":

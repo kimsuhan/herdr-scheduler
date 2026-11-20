@@ -153,6 +153,9 @@ calls. Read one before you put it in `jobs/`, and read what an agent wrote for y
 - **A schedule's page**: a switch to pause it, edit and delete, the timer, Run now, what it runs, and
   its history with the last sixteen results as a strip.
 - **Settings**, at the bottom: the language.
+- **Update**: once a day the panel asks GitHub for the latest release (one request, no token). When a
+  newer one is out, an `Update to` pill in the header opens a page that starts your agent with a prompt
+  to copy the release over the mod. Your `jobs/` stays.
 
 ## Remove
 
