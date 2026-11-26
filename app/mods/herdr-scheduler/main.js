@@ -41,6 +41,7 @@ export default class Scheduler extends View {
   init(_props, cx) {
     this.loaded = null; // from jobs/, null while loading
     this.open = null; // the bot whose detail is shown
+    this.hovered = null; // the bot whose row the pointer is on: its row shows the pause button
     this.output = null; // { id, text }: an ended run's screen, read back
     this.form = null; // the new or edit form's fields, while it is shown
     this.settings = false; // the settings page is shown
@@ -538,9 +539,10 @@ export default class Scheduler extends View {
     const last = this.runs(b.name)[0], s = last && state(last);
     const at = !b.error && next(b.schedule, Date.now()), mono = settings().font_family ?? "JetBrains Mono";
     const wrong = b.error ?? ((s === "failed" || s === "skipped") && last.note);
-    const meta = wrong ? L(wrong) : L(describe(b.schedule));
+    const meta = wrong ? L(wrong) : L(describe(b.schedule)), paused = Boolean((shared("scheduler.paused") ?? {})[b.name]);
     return h_flex().id(`bot-${b.name}`).mx(8).pl(10).pr(8).py(7).gap(10).items_center().rounded(8).cursor_pointer()
       .border_l(2).border_color(word ? color : t.background).when(Boolean(word), (el) => el.bg(t.raised)).hover((st) => st.bg(t.hover))
+      .on_hover((on, cx) => { if (on) this.hovered = b.name; else if (this.hovered === b.name) this.hovered = null; cx.notify(); })
       .on_click((_e, cx) => { this.open = b.name; this.output = null; cx.notify(); })
       .child(v_flex().flex_1().min_w(0).gap(2)
         .child(div().truncate().font_medium().child(b.name))
@@ -552,12 +554,21 @@ export default class Scheduler extends View {
             : div().font_family(mono).text_size(12).text_color(at - Date.now() < 3_600_000 ? t.foreground : t.muted).child(timer(at)))
           // How its last eight runs went (all dots before its first run).
           .child(this.strip(this.runs(b.name, true), 8, t)))
-        // While it runs, a spinner that can't be pressed again.
-        .child(div().id(`run-${b.name}`).size(24).flex_none().flex().items_center().justify_center().rounded(6).text_size(10)
-          .text_color(t.dim).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .when(running(b.name), (el) => el.text_size(13).text_color(t.working).frames(SPIN, 90))
-          .when(!running(b.name), (el) => el.cursor_pointer().hover((st) => st.bg(t.raised).text_color(t.foreground))
-            .on_click((_e, cx) => this.go(b, "manual", cx)).child("▶"))));
+        // ▶ over Ⅱ. While it runs, ▶ is a spinner that can't be pressed again. Ⅱ pauses without opening
+        // the page: on the row pointed at, and always on a paused one (in `accent`, where it resumes).
+        // Its room stays when hidden, so ▶ doesn't move under the pointer.
+        .child(v_flex().flex_none()
+          .child(div().id(`run-${b.name}`).w(24).h(20).flex().items_center().justify_center().rounded(6).text_size(10)
+            .text_color(t.dim).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .when(running(b.name), (el) => el.text_size(13).text_color(t.working).frames(SPIN, 90))
+            .when(!running(b.name), (el) => el.cursor_pointer().hover((st) => st.bg(t.raised).text_color(t.foreground))
+              .on_click((_e, cx) => this.go(b, "manual", cx)).child("▶")))
+          .child(this.hovered === b.name || paused
+            ? div().id(`pause-${b.name}`).w(24).h(18).flex().items_center().justify_center().rounded(6).text_size(10).cursor_pointer()
+              .text_color(paused ? t.accent : t.dim).hover((st) => st.bg(t.raised).text_color(paused ? t.accent : t.foreground))
+              .tooltip(L(paused ? "Resume" : "Pause")).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+              .on_click(() => setPaused(b.name, !paused)).child("Ⅱ")
+            : div().h(18))));
   }
 
   // A schedule's page, as cards: when it runs next (or what it is doing) with the actions, what it

@@ -154,7 +154,8 @@ calls. Read one before you put it in `jobs/`, and read what an agent wrote for y
 - **Timeline**: left of now, a dot for each hour something ran (green, or red when a run failed); right
   of now, a ring for each hour something will run, filled for the next one.
 - **List**: what is running or has gone wrong comes first, then schedules by next run, then scripts, then
-  paused ones. Each row has a timer to its next run and how the last run went. `▶` runs it now.
+  paused ones. Each row has a timer to its next run and how the last run went. `▶` runs it now, and
+  `Ⅱ` under it, shown when you point at the row, pauses or resumes it.
 - **A schedule's page**: a switch to pause it, edit and delete, the timer, Run now, what it runs, and
   its history with the last sixteen results as a strip.
 - **Settings**, at the bottom: the language.

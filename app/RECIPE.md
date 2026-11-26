@@ -70,9 +70,12 @@ Top to bottom:
      is done or handled, `ansi1` when it failed, was missed or interrupted, the state's color while it
      is going, else `dim`) and a 3px `border` dot for each slot with no run yet. A code
      schedule's row reads the same; what its last round found is on its page;
-  3. a 24px "▶" with no frame (`dim`; `raised` background and `foreground` on hover). While the schedule
-     is running (see "▶" and "Run now" below) it is a braille spinner (`.frames`, 90ms, 13px `working`)
-     that can't be pressed.
+  3. a 24px wide column with no frames: "▶" (20px tall, `dim`; `raised` background and `foreground` on
+     hover) over "Ⅱ" (18px tall). While the schedule is running (see "▶" and "Run now" below) "▶" is a
+     braille spinner (`.frames`, 90ms, 13px `working`) that can't be pressed. "Ⅱ" (tooltip "Pause")
+     shows on the row the pointer is on (`on_hover`); on a paused row it is always there in `accent`
+     (tooltip "Resume"); elsewhere its room stays empty so "▶" doesn't move. Pressing it pauses or
+     resumes without opening the page.
   A schedule in a state (blocked, paused, gone wrong) has a `raised` background and its left
   border in the state's color (a running one keeps its timer and plain look: only its "▶" spins); the others are plain, with the border in `background`. A broken file
   has only the name and the reason.
@@ -429,7 +432,8 @@ Top to bottom:
   "done", and the next run ends the first one's agent.
 - The same schedule with `where: { space: "<a space's name>" }` adds a tab to that space, and with
   `where: { worktree: { repo, branch } }` makes the checkout and a space on it; neither takes focus.
-- Turning the switch off stops the runs and shows "paused"; turning it on brings the timer back.
+- Turning the switch off stops the runs and shows "paused"; turning it on brings the timer back. A row's
+  "Ⅱ" does the same without opening the page, and the row moves to Paused and back.
 - "Settings" at the bottom of the list opens the settings; picking 한글 turns the whole panel Korean at
   once ("스케줄러", "스케줄 3개", "평일 09:00"), and English turns it back.
 - "Add schedule" with a name, Daily 09:00, Background and a prompt saves `jobs/<name>.js` and the schedule is in the list;
