@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { duration, parse, slot, next, due, describe, items, remember, dayFile, keepDays, expired, rows, fold } from "./schedule.js";
+import { duration, parse, slot, next, due, describe, items, remember, dayFile, keepDays, expired, rows, fold, working, settled } from "./schedule.js";
 
 // Local-time dates, so the cases hold in any time zone. 2026-11-12 is a Thursday.
 const at = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime();
@@ -75,6 +75,35 @@ test("remember", () => {
   assert.deepEqual(remember({}, "a", 1), { a: 1 });
   assert.deepEqual(remember({ a: 1 }, "b", 2), { a: 1, b: 2 });
   assert.deepEqual(remember({ b: 3, a: 1, c: 2 }, "d", 4, 3), { c: 2, b: 3, d: 4 }); // the oldest goes
+});
+
+test("working: the terminal, an agent inside it, or a terminal it started", () => {
+  assert.equal(working({ status: "blocked" }, []), true);
+  assert.equal(working({ status: "done", records: { a: { state: "working" } } }, []), true);
+  assert.equal(working({ status: "idle" }, [{ state: "live", status: "working" }]), true);
+  assert.equal(working({ status: "idle" }, [{ state: "live" }]), true); // a program, still running
+  assert.equal(working({ status: "done", records: { a: { state: "done" } } }, [{ state: "live", status: "idle" }, { state: "finished" }]), false);
+  assert.equal(working({}, []), false); // a shell: no status
+});
+
+test("settled: a run's work is over once a turn ended since its prompt and nothing worked for a while", () => {
+  const k = (status, turn, records) => ({ status, turn, records });
+  const still = { turn: 5, at: 0 };
+  // The prompt's turn isn't over yet, or the agent works or waits on the person.
+  assert.deepEqual(settled(k("done", 4), 4, [], null, 0), { quiet: null, over: false });
+  assert.deepEqual(settled(k("working", 5), 4, [], still, 60_000), { quiet: null, over: false });
+  assert.deepEqual(settled(k("blocked", 5), 4, [], still, 60_000), { quiet: null, over: false });
+  // An agent inside it, or a terminal it started (an agent at work, or a program with no status), still runs.
+  assert.equal(settled(k("done", 5, { a: { state: "working" } }), 4, [], still, 60_000).over, false);
+  assert.equal(settled(k("done", 5), 4, [{ state: "live", status: "working" }], still, 60_000).over, false);
+  assert.equal(settled(k("done", 5), 4, [{ state: "live" }], still, 60_000).over, false);
+  // A helper that is through, or one gone, doesn't hold it.
+  assert.equal(settled(k("done", 5, { a: { state: "done" } }), 4, [{ state: "live", status: "done" }, { state: "finished" }], still, 30_000).over, true);
+  // Still: from the first time seen, over after `wait`; a turn that moved on starts the wait again.
+  assert.deepEqual(settled(k("idle", 5), 4, [], null, 1_000), { quiet: { turn: 5, at: 1_000 }, over: false });
+  assert.deepEqual(settled(k("idle", 5), 4, [], still, 29_999), { quiet: still, over: false });
+  assert.deepEqual(settled(k("idle", 5), 4, [], still, 30_000), { quiet: still, over: true });
+  assert.deepEqual(settled(k("done", 6), 4, [], still, 40_000), { quiet: { turn: 6, at: 40_000 }, over: false });
 });
 
 test("history files: day, keep, expired", () => {

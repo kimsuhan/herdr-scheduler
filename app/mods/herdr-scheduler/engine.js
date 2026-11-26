@@ -6,7 +6,7 @@
 
 import * as fs from "fs/promises";
 import { hc, exec, appHome, home, settings, shared, setShared, terminals, spaces, panes, notify, readTextFile, writeTextFile } from "herdr";
-import { parse, due, next, duration, items, remember, dayFile, keepDays, expired, rows } from "./schedule.js";
+import { parse, due, next, duration, items, remember, dayFile, keepDays, expired, rows, going, working, settled } from "./schedule.js";
 import { say } from "./i18n.js";
 
 // Notifications in the panel's language. History notes stay English and are translated when shown.
@@ -17,7 +17,6 @@ const GRACE = 90_000;
 const HISTORY = 50; // rows per bot in shared; older ones move to the day files
 const KEEP = 30; // days of history kept when a bot doesn't say
 const KEPT = 5; // finished background terminals kept per bot, for reading back
-const going = (status) => status === "working" || status === "blocked";
 const expand = (p) => (p === "~" ? home() : p.startsWith("~/") ? home() + p.slice(1) : p);
 const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 
@@ -222,10 +221,14 @@ export async function historyDay(name, file) {
   return rows([...kept, ...own].map((r) => JSON.stringify(r)).join("\n"));
 }
 
-// A live terminal of this bot (one it started, or one holding one of its threads) that is still
-// working or waiting on someone.
-export const busy = (name) => terminals().find((k) => k.state === "live" && going(k.status)
-  && (k.labels?.["scheduler.bot"] === name || k.labels?.["scheduler.thread"]?.startsWith(`${name}:`)));
+// A live terminal at work (see working) on a run of this bot: one whose run (its scheduler.run row) is
+// still starting or sent, not yet marked done by tidy. What a person does in it after that is theirs,
+// and doesn't hold the bot.
+export const busy = (name) => {
+  const open = new Set((shared("scheduler.history") ?? []).filter((r) => r.bot === name && (r.status === "starting" || r.status === "sent")).map((r) => r.id));
+  const all = terminals();
+  return all.find((k) => k.state === "live" && open.has(k.labels?.["scheduler.run"]) && working(k, all.filter((c) => c.parent === k.address)));
+};
 // Bots with a run being started or a round going, in this JS thread (copies of the mod share it, a
 // reload empties it): one bot never has two at once, and a "starting" row of a bot not in here was cut off.
 const active = new Set();
@@ -334,25 +337,34 @@ async function reap(bot) {
   for (const r of old) if ((await hc(["rm", r.terminal])).code === 0) patch(r.id, { removed: true }); // a live one stays for later
 }
 
-// Ends background agents that are through. An agent with no tab is a program holding memory that
-// nobody sees, so it goes as soon as its turn is over: its row is marked done first, and its last
-// screen stays readable from the history. One waiting on the person stays, and so does one holding a
-// thread (its conversation is continued). The agents of schedules that are gone go too, with their
-// terminals. Not with no schedules at all, which is also what an unreadable jobs/ folder looks like.
+// Marks runs whose work is over "done" (see settled): from then on the terminal is no longer the bot's
+// run, so a person carrying on the conversation doesn't hold the bot. An agent with no tab is a program
+// holding memory that nobody sees, so it is ended then; its last screen stays readable from the history.
+// One waiting on the person stays, and so does one in a tab or holding a thread (its conversation is
+// continued). The idle agents of schedules that are gone go too, with their terminals. Not with no
+// schedules at all, which is also what an unreadable jobs/ folder looks like.
+const quiet = new Map(); // settled()'s quiet, by terminal address
 export async function tidy(bots) {
   const names = new Set(bots.map((b) => b.name));
   if (!names.size) return;
   await archive(names);
   await prune(bots);
+  const now = Date.now();
   for (const k of terminals()) {
-    const bot = k.labels?.["scheduler.bot"];
-    if (k.state !== "live" || !bot || k.labels["herdr.tab"] || k.labels["scheduler.thread"] || going(k.status)) continue;
-    if (!names.has(bot)) { await hc(["kill", k.address]); await hc(["rm", k.address]); continue; }
-    // Its prompt was sent and a turn has ended: not one still waiting for its prompt.
-    const row = (shared("scheduler.history") ?? []).find((r) => r.id === k.labels["scheduler.run"] && r.terminal === k.address);
-    if (row?.status !== "sent" || !(k.turn >= 1)) continue;
+    if (k.state !== "live") continue;
+    const bot = k.labels?.["scheduler.bot"], kept = k.labels?.["herdr.tab"] || k.labels?.["scheduler.thread"];
+    if (bot && !names.has(bot)) {
+      if (!kept && !going(k.status)) { await hc(["kill", k.address]); await hc(["rm", k.address]); }
+      continue;
+    }
+    const row = (shared("scheduler.history") ?? []).find((r) => r.id === k.labels?.["scheduler.run"] && r.terminal === k.address);
+    if (row?.status !== "sent") continue; // not one still waiting for its prompt
+    // A row from before `turn` was kept counts from 0: any ended turn.
+    const s = settled(k, row.turn ?? 0, terminals().filter((c) => c.parent === k.address), quiet.get(k.address), now);
+    if (!s.over) { s.quiet ? quiet.set(k.address, s.quiet) : quiet.delete(k.address); continue; }
+    quiet.delete(k.address);
     patch(row.id, { status: "done" });
-    await hc(["kill", k.address]);
+    if (!kept) await hc(["kill", k.address]);
   }
 }
 
@@ -385,9 +397,10 @@ async function launch(bot, { where: w, agent, prompt }, id, labels = []) {
   patch(id, { terminal });
   // An agent that never took its prompt is ended: its row's last screen shows where it stopped.
   try { await ready(terminal); } catch (e) { await hc(["kill", terminal]); throw e; }
+  const turn = terminals().find((k) => k.address === terminal)?.turn ?? 0; // the run is over past this turn
   const sent = await hc(["send", terminal, prompt, "--if", "idle", "--json"]);
   if (sent.code !== 0) throw new Error(`the prompt wasn't sent: ${sent.stderr.trim() || sent.stdout.trim()}`);
-  patch(id, { status: "sent" });
+  patch(id, { status: "sent", turn });
   return terminal;
 }
 
@@ -436,6 +449,9 @@ async function round(bot, trigger) {
     let fresh = 0;
     for (const item of found) {
       if (busy(bot.name)) break; // the rest wait, unseen, for a later round
+      // An item for a thread whose terminal is at work (a person talking to it) waits, unseen: a send
+      // would land in the middle of that.
+      if (item.thread != null && going(terminals().find((k) => k.state === "live" && k.labels?.["scheduler.thread"] === `${prefix}${item.thread}`)?.status)) continue;
       // The key is written before anything is awaited, so of several copies of the mod only one handles it.
       const seen = shared("scheduler.seen") ?? {};
       const failed = manual && (shared("scheduler.history") ?? []).find((r) => r.bot === bot.name && r.item === item.key)?.status === "failed";
@@ -487,10 +503,11 @@ function api(bot, row) {
     // The row follows the terminal from now on; its earlier rows read "ended".
     async send(terminal, text) {
       handling("send");
+      const turn = terminals().find((k) => k.address === terminal)?.turn ?? 0;
       const r = await hc(["send", terminal, text]);
       if (r.code !== 0) throw new Error(`not sent to ${terminal}: ${r.stderr.trim() || r.stdout.trim()}`);
       await hc(["label", terminal, `scheduler.run=${row}`]);
-      patch(row, { terminal, where: panes().some((p) => p.terminal === terminal) ? "space" : "background", status: "sent" });
+      patch(row, { terminal, where: panes().some((p) => p.terminal === terminal) ? "space" : "background", status: "sent", turn });
     },
     skip(item, why) {
       if (row) return patch(row, { status: "skipped", note: String(why) });
@@ -513,7 +530,8 @@ export function state(row) {
   // A code item's row is "starting" while its handle runs, which is the script's work: "running".
   if (row.status === "starting") return !active.has(row.bot) ? "interrupted" : row.trigger === "poll" ? "running" : "starting";
   if (row.status !== "sent") return row.status; // failed, missed, handled, skipped, done (ended by tidy)
-  const k = terminals().find((k) => k.address === row.terminal && k.labels?.["scheduler.run"] === row.id);
+  const all = terminals(), k = all.find((k) => k.address === row.terminal && k.labels?.["scheduler.run"] === row.id);
   if (!k || k.state !== "live") return "ended";
-  return k.status === "working" ? "running" : k.status === "blocked" ? "blocked" : "done";
+  if (k.status === "blocked") return "blocked";
+  return working(k, all.filter((c) => c.parent === k.address)) ? "running" : "done";
 }

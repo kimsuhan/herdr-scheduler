@@ -79,6 +79,25 @@ export function items(list) {
   });
 }
 
+// An agent status that means someone is still on it: working, or waiting on the person.
+export const going = (status) => status === "working" || status === "blocked";
+
+// Whether terminal `k` or what it runs is at work: k itself, an agent inside it (`records`), or a
+// terminal it started (`children`; one with no status is a program still running).
+export const working = (k, children) => going(k.status) || Object.values(k.records ?? {}).some((r) => going(r.state))
+  || children.some((c) => c.state === "live" && (going(c.status) || !c.status));
+
+// Whether a run's work in its terminal `k` is over. `turn` is k's turn when the run's prompt was sent,
+// `quiet` what the last call returned for k. The work is over once a turn has ended since the prompt and
+// nothing has been working for `wait` ms: a helper's report starts k again within that time, and what k
+// does after it is the person's. Returns { quiet, over }: `quiet` is { turn, at } since k went still at
+// that turn, or null while it works.
+export function settled(k, turn, children, quiet, now, wait = 30_000) {
+  if (working(k, children) || !(k.turn > turn)) return { quiet: null, over: false };
+  const since = quiet?.turn === k.turn ? quiet : { turn: k.turn, at: now };
+  return { quiet: since, over: now - since.at >= wait };
+}
+
 // A bot's seen keys ({ key: ms }) with `key` added at `now`, keeping the newest `cap`.
 export function remember(seen, key, now, cap = 500) {
   const all = Object.entries({ ...seen, [key]: now });

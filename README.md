@@ -102,9 +102,12 @@ Worktrees go to `<folder>/<repo>/<schedule name>`, where Herdr's New worktree pu
 A schedule runs up to 5 seconds after its time: the panel checks every 5 seconds. Saving a schedule
 reloads the mod, and nothing runs for 30 seconds after a reload.
 
-A schedule doesn't start a new run while its last one is still working or waiting on you. A background
-agent is ended as soon as its turn is over, so none sits in memory; its last screen stays readable from
-the history. One that is waiting on you stays until you answer it.
+A schedule doesn't start a new run while its last one is still working or waiting on you, counting the
+helpers its agent started. A run is over once the agent has finished a turn since its prompt and nothing
+has worked for 30 seconds; after that, what you do with that agent (say, carrying on the conversation in
+its tab) is yours and doesn't hold the schedule. A background agent is ended then, so none sits in
+memory; its last screen stays readable from the history. One that is waiting on you stays until you
+answer it.
 
 ## Scripts
 
@@ -131,7 +134,9 @@ export default {
 
 `ctx` has `exec`, `start`, `send`, `thread`, `notify`, `skip`, `state.get`/`state.set` (kept in Herdr's
 shared state under `scheduler.state`, where other mods can read it), `spaces`, `panes`, `terminals` and
-`home`. A script that starts agents handles one item at a time; the rest wait for a later round.
+`home`. A script that starts agents handles one item at a time; the rest wait for a later round. An
+item with a `thread` whose terminal is working (you are talking to it) waits too, so a send never lands in
+the middle of that.
 `examples/worktree-cleanup.js` is a commented script that marks worktree spaces whose pull request is
 merged or closed.
 

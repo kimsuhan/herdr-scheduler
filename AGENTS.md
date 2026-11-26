@@ -129,6 +129,10 @@ Split a file only when it earns it (`run.js` out of `engine.js` once the three p
 - Schedules run per machine; spaces on other machines and runs while Herdr is closed are out of scope.
 - A background agent blocked on a permission question has no pane: it only shows in the panel.
 - An `agent` that reports no status (a plain shell) never gets its prompt: the run fails after 2 minutes.
+- Whose work an agent is doing is guessed (`settled` in `schedule.js`): a run is over 30 seconds after a turn
+  ends with nothing at work. A person who writes to it within those 30 seconds is counted as the run; work
+  the agent waits on that is neither its `records` nor an `hc` child (Claude's background shell commands)
+  isn't seen, so the run can end early; and a child left running with no status (a dev server) holds it.
 - The form writes a schedule as plain data: editing a hand-written file through it drops the file's comments.
   It can't rename a script (only a prompt schedule), and agent arguments with spaces need the file. There is no pause-all.
 - History in `shared` is the newest 50 runs per schedule; older ones and every round are in day files. A day

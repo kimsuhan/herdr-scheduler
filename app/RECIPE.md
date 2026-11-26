@@ -191,8 +191,11 @@ Top to bottom:
      when it returns true the label is removed (`hc label <t> scheduler.thread=`).
   2. `poll` returns items. Nothing counts as none; anything but an array, or an item without a `key`, is
      a failure. Keys are made strings.
-  3. Each item in order: the round stops if the schedule is busy (a live terminal labelled with the schedule or one
-     of its threads is working or blocked); an item whose key is in
+  3. Each item in order: the round stops if the schedule is busy (a live terminal whose `scheduler.run`
+     row of this schedule is still "starting" or "sent" is at work: its status is working or blocked, one
+     of its `records` is, or a live terminal with it as `parent` is working, blocked or has no status); an
+     item with a `thread` whose terminal (`scheduler.thread=<name>:<thread>`) is working or blocked is
+     passed over and stays unseen; an item whose key is in
      `scheduler.seen` is passed over; otherwise its key is written there (before anything is awaited)
      and `handle` runs. The round also stops after an item whose `handle` gave an agent work
      (`ctx.start` or `ctx.send`), since the agent may not report working yet. Items it didn't reach come
@@ -218,7 +221,8 @@ Top to bottom:
   days, then goes. Deleting a schedule in the panel deletes its history at once; a file that is only moved
   out of `jobs/` keeps it. Renaming one in the form moves its day files to the new name first, joined to
   what is already there.
-- History states: checked (a round), starting, running, blocked, done (the agent is idle again; for a background run, ended with its turn over), ended (its terminal is
+- History states: checked (a round), starting, running (the agent, one of its `records` or a terminal it
+  started is at work), blocked, done (nothing is at work, or the run is over: see below), ended (its terminal is
   gone, or a later item's `ctx.send` took it), failed, missed, interrupted (a start or a `handle` cut off by a
   reload: a "starting" row whose schedule isn't running in this JS thread), handled, skipped.
 - "▶" and "Run now" start the schedule at once, paused or not: a code schedule runs a round, in which an
@@ -263,10 +267,16 @@ Top to bottom:
   seen): a background run still alive opens in a peek (`terminal.peek`); a run in a
   tab is gone to (`pane.focus`); an ended run's last 200 lines are read back and shown under the row in
   the terminal font (click again to fold).
-- A background agent is ended as soon as its turn is over, on the next tick: it has no tab, so left
-  alive it is a program holding memory that nobody sees. Its row is marked "done" first and its last
-  screen stays readable from the history. One that is blocked (waiting on the person) stays, and so
-  does one holding a thread, whose conversation is continued. Of a schedule's ended background
+- A "sent" row's run is over once its terminal's `turn` is past the one recorded when the prompt was sent
+  (`turn` on the row; a row without it counts from 0), and for 30 seconds nothing is at work: not the
+  terminal, not its `records`, not a live terminal with it as `parent`. Each tick checks, keeping in memory
+  since when each terminal has been still at which turn (a new turn starts the 30 seconds again), and marks
+  the row "done". From then on the terminal is no longer the schedule's run: a person carrying on the
+  conversation doesn't make the schedule busy or the row "running".
+- A background agent is ended when its run is over: it has no tab, so left alive it is a program holding
+  memory that nobody sees. Its row is marked "done" first and its last screen stays readable from the
+  history. One that is blocked (waiting on the person) stays, and so does one in a tab or holding a
+  thread, whose conversation is continued. Of a schedule's ended background
   terminals only the newest 5 are kept (`hc rm` for the rest, before its next background run).
 - The same tick ends the idle background agents of schedules that no longer exist, and removes their
   terminals. Renaming a schedule relabels its live terminals, so they stay its own.
@@ -288,7 +298,9 @@ Top to bottom:
   key, now, cap = 500)` (the seen keys with one added, the oldest dropped past the cap); `dayFile(at)`;
   `keepDays("30d")`; `expired(files, keep, now)` (the day files before the day `keep` days back);
   `rows(text)` (a day file's rows, newest first, each id once); `fold(rows)` (rounds in a row with nothing new as one row
-  with `count` and `from`).
+  with `count` and `from`); `going(status)` (working or blocked); `working(k, children)` (the terminal, one
+  of its `records` or a live child at work); `settled(k, turn, children, quiet, now, wait = 30000)` (whether
+  a run is over, with `{ turn, at }` to pass back next time).
   `schedule.test.js` covers them with `node --test`.
 - `i18n.js`, pure: `LANGUAGES`; `say(lang, key, ...args)`, where the English text in the code is the key
   and `{0}`, `{1}` are filled in. A language is a map from key to text plus patterns for messages with a
@@ -297,8 +309,8 @@ Top to bottom:
   message and fails if a language lacks one.
 - `engine.js`: `load()` reads `jobs/` with `fs/promises` `readdir` and imports each file with
   `import(["./jobs/", file].join(""))`; `tick(bots)` returns what to start; `start(bot, trigger)` (a run,
-  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `tidy(bots)` (ends background agents that are through, then moves rows to the day files and deletes
-  expired ones); `running(name)`; `roundsOf(name)` (a code schedule's rounds, newest first, kept in a
+  or a code schedule's round); `state(row)`; `busy(name)`; `where(w)`; `tidy(bots)` (moves rows to the day files and deletes
+  expired ones, then marks runs that are over "done" and ends their background agents); `running(name)`; `roundsOf(name)` (a code schedule's rounds, newest first, kept in a
   module-level object); `historyDays(name)` and `historyDay(name, file)` (for All history); `setPaused(name, on)`; `check(bot)` (a code schedule
   checks to `{ schedule, code: true }` and is called through its file's object, so `this` works);
   `save(name, bot, fresh)` and `remove(name)` with `fs/promises` `exists`, `mkdir`, `writeFile`, `unlink`.
@@ -363,7 +375,7 @@ Top to bottom:
   `scheduler.thread=<name>:<thread>`, which a person may also put on a terminal by hand.
 - Shared state: `scheduler.slots` `{ name: ms }`, `scheduler.paused` `{ name: true }`, `scheduler.next`
   `{ name: ms }` (for other mods), `scheduler.history` (rows `{ id, bot, at, trigger, where?, status,
-  item?, terminal?, note?, removed? }`, newest first, 50 per schedule; older ones are in the day files), `scheduler.seen` `{ name: { key: ms } }`
+  item?, terminal?, turn?, note?, removed? }`, newest first, 50 per schedule; older ones are in the day files), `scheduler.seen` `{ name: { key: ms } }`
   (500 per schedule), `scheduler.state` `{ name: { key: value } }` (for other mods), `scheduler.lang`, `scheduler.overrides`
   `{ name: { schedule, about, keepHistory? } }` (what the panel changed of a code schedule).
 
@@ -379,6 +391,11 @@ Top to bottom:
   start the same run or handle the same item.
 - Right after `hc send` an agent may still report idle, so a busy check alone lets a round hand out a
   second item at once: stop after an item that gave an agent work.
+- An agent's turn is not its run. A reviewer that starts helpers (`hc run --bg` with itself as parent)
+  ends its turn while they work and starts another when they report, so a run is over only when a turn
+  has ended and nothing worked for a while. Claude's own background agents keep its status working (they
+  are its `records`). The other way, an agent a run started keeps working for the person afterwards
+  (a tab they talk in, a thread's reviewer they ask more): only the run's row says whose work it is.
 - A thread's terminal must survive the schedule's next background start: the cleanup skips terminals with a
   `scheduler.thread` label, and `ended` is what lets them go.
 - Every `setShared` redraws every mod. Write `scheduler.slots` and `scheduler.next` only when they
@@ -421,6 +438,8 @@ Top to bottom:
   handled once across rounds; an item whose `handle` calls `ctx.start({ where: { background: true },
   agent, prompt, thread })` gets its prompt answered and the terminal carries `scheduler.thread`; a later
   item on that thread finds it with `ctx.thread` and `ctx.send` continues the same conversation; the next
-  item after one that started or sent waits for the next round; `ended` returning true removes the
+  item after one that started or sent waits for the next round; typing a new question into that thread's
+  agent once its row reads "done" doesn't show the schedule as running, and an item for that thread waits
+  while it answers; `ended` returning true removes the
   label; a `poll` that throws makes one "failed" row, not one per round; `ctx.state.set` shows under
   `scheduler.state`.

@@ -4,9 +4,12 @@
 //   2. poll(ctx), which returns items: [{ key, thread?, ...anything }];
 //   3. handle(item, ctx) for each item whose key this schedule has not seen before, one after another.
 // A key is handled once, ever (the newest 500 keys are remembered per schedule). Before each item the
-// round stops if one of the schedule's agents is working or waiting, so a schedule that starts agents takes one
-// item at a time; the rest come back unseen in a later round. A late slot simply runs: a round is
-// safe to repeat, so there is no catchUp.
+// round stops if one of the schedule's runs is still working or waiting (its agent, or helpers it
+// started), so a schedule that starts agents takes one item at a time; the rest come back unseen in a
+// later round. A run is over once its agent finished a turn since the prompt and nothing worked for 30
+// seconds; a person talking to that agent afterwards doesn't hold the schedule. An item with a `thread`
+// whose terminal is working (a person talking to it) waits too, unseen. A late slot simply runs: a round
+// is safe to repeat, so there is no catchUp.
 //
 // This one marks worktree spaces whose pull request is merged or closed. It deletes nothing: it
 // keeps what it found in Herdr's shared state, under "scheduler.state" -> { "<schedule name>": { ended:

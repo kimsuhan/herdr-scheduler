@@ -4,7 +4,7 @@
 // Pure: `shared` and `setShared` are handed in, so `node --test` runs it.
 
 // The release this copy is. Bumped in the commit that gets the tag (AGENTS.md, Versions).
-export const VERSION = "0.2.0";
+export const VERSION = "0.2.1";
 export const REPO = "kimsuhan/herdr-scheduler";
 
 /** a > b, for versions like v1.2.3 or 1.2.3. */
